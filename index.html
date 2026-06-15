@@ -113,7 +113,7 @@
       <b>Арены смертельны:</b> ⚡стены под током, 🔥струи пламени из пола, 🗡шипы в стенах — загоняй врага в опасность.<br>
       <b style="color:var(--acc)">НОВОЕ:</b> Блок расходует шкалу Выносливости. Пробитие блока = гарантированный крит!
     </div>
-    <div class="credit"></div>
+    <div class="credit">Одиночный HTML5 файл · Готово к интеграции</div>
   </div>
 
   <div id="net" class="overlay hidden">
@@ -150,7 +150,8 @@
     <div class="hint" style="text-align:left;max-width:740px">
       <b>КОМБО:</b> попал слабым/ногой — успей нажать сильный (→ хук/головой), а сильным → <b>спец/супер</b>. Цепляй <kbd>F</kbd>→<kbd>G</kbd>→<kbd>H</kbd> в серию, пока бьёшь по цели.<br>
       <b>УКЛОН-КУВЫРОК:</b> сидя (вниз) + прыжок — перекат с неуязвимостью. <b>ЛАУНЧЕР:</b> вниз+спец — подброс, дальше прыжок и удары в воздухе = <b>жонглирование</b>.<br>
-      <b>УРОН ПО ЗОНАМ:</b> бей в голову/торс/ноги — последствия разные. Когда HP в <b>критической зоне</b>, удары становятся жёстче, повреждаются <b>внутренние органы</b> — и это добивает. Мечом можно <b>отсечь конечность/обезглавить</b>.<br>
+      <b>УРОН ПО ЗОНАМ:</b> бей в голову/торс/ноги — последствия разные. Полоска теперь — <b>СТОЙКОСТЬ</b>: пока она есть, тело держит удары. Когда стойкость <b>сломлена (0)</b>, удары наносят <b>критический урон конечностям</b> — обнулил зону (голову/торс/руку/ногу) = <b>смерть</b>. Мечом можно <b>отсечь конечность/обезглавить</b>.<br>
+      <b>КРОССАП:</b> перепрыгни через врага (особенно через блок) и бей <b>В СПИНУ</b> — не блокируется и критует. Блокирующий/атакующий боец не разворачивается мгновенно.<br>
       <b>МЕЧИ (1 удар):</b> любой клинок убивает с касания. <b>Блок</b> (зажать назад) держит удары только по своей высоте:
       стоя — верхние, сидя — подсечки. Блок в первые кадры = <b>ПАРРИ</b> → враг в стаггере, добивай.
       Встречные клинки дают <b>ЗВОН</b>. <b>Пинок</b> (Бросок) ломает блок, но гибнет от клинка. <b>Спец</b> — выпад: длинный и быстрый, но смертельно наказуем при промахе.<br>
@@ -257,6 +258,7 @@ function canDash(f){ return f.limbs.legA>0 && f.limbs.legB>0 && !f.broken.torso;
 function damLimb(f,key,amt){ if(f.limbs[key]==null||f.limbs[key]<=0)return;
   f.limbs[key]=Math.max(0,f.limbs[key]-amt);
   if(f.limbs[key]<=0&&!f.broken[key]){ f.broken[key]=true;
+    if(f.hp<=0&&!isSword())f._lethal=true;   // стойкость сломлена и конечность обнулена — смерть
     if(key==='head'){ popText('ОГЛУШЕН',f.x,f.y-160,'#ffd23f'); FX.spark(f.x,f.y-120,'#ffd23f',18,false); FX.blood(f.x,f.y-118,f.facing,18,1.5); SFX.crack(); shake(10); f.dizzy(); }
     else if(key==='torso'){ popText('РЁБРА СЛОМАНЫ',f.x,f.y-150,'#ff5577'); FX.spark(f.x,f.y-74,'#ff5577',16,false); FX.blood(f.x,f.y-72,f.facing,20,1.6); SFX.crack(); shake(10); }
     else { const arm=key[0]==='a'; popText(arm?'РУКА СЛОМАНА':'НОГА СЛОМАНА',f.x,f.y-150,'#ff5577');
@@ -271,7 +273,7 @@ function hitRegion(hb,def){
   if(hbc<=headLo)return 'head'; if(hbc<=torsoLo)return 'torso'; return 'leg';
 }
 function regionKey(r){ return r==='head'?'head':r==='leg'?'legB':'torso'; }
-function hurtLimbsRegion(def,region,m,crit){ const k=(crit?1.8:1)*(def.hp<MAX_HP*0.3?1.5:1), loss=Math.min(40,7+m.dmg*0.16)*k;
+function hurtLimbsRegion(def,region,m,crit){ const k=(crit?1.8:1)*(def.hp<=0?4:def.hp<MAX_HP*0.3?1.6:1), loss=Math.min(120,7+m.dmg*0.16)*k;
   if(region==='head'){ damLimb(def,'head',loss); }
   else if(region==='leg'){ damLimb(def,'legB',loss); damLimb(def,'legA',loss*0.7); }
   else { damLimb(def,'torso',loss); damLimb(def,'armB',loss*0.3); } }
@@ -438,7 +440,7 @@ class Fighter{
     this.sx=1; this.sy=1; this.rig=null; this.skid=0; this.parryT=0; this.dead=false; this._downedLatch=false; this.stepPhase=0; this.wounded=0; this._blade=null; this.clashCD=0;
     this.limbs={head:100,torso:100,armA:100,armB:100,legA:100,legB:100};
     this.broken={head:false,torso:false,armA:false,armB:false,legA:false,legB:false};
-    this.lastRegion='torso'; this.organs=100; this.sever=null; this.rollDir=1; this._critLatch=false;
+    this.lastRegion='torso'; this.organs=100; this.sever=null; this.rollDir=1; this._critLatch=false; this._exhaustLatch=false; this._lethal=false;
   }
   get downed(){ return this.broken.legA&&this.broken.legB; }
   get hurt(){ if(this.downed){ return {x:this.x-32,y:this.y-46,w:64,h:46}; }
@@ -478,17 +480,13 @@ class Fighter{
       this.vx=fromFacing*m.push; this.meter=Math.min(MAX_METER,this.meter+4);
       FX.spark(this.x-fromFacing*14,this.y-72,'#bcd0ff',6,true); SFX.block(); hitstop(4); shake(3);
     } else {
-      const hpFrac=clamp(this.hp/MAX_HP,0,1), trauma=1+(1-hpFrac)*0.7;   // ниже HP — жёстче
+      const hpFrac=clamp(this.hp/MAX_HP,0,1), trauma=1+(1-hpFrac)*0.7;   // ниже стойкость — жёстче
       const vuln=(1+VULN_PER_BREAK*brokenCount(this))*torsoVuln(this)*trauma;
       const mult=(counter?COUNTER_MULT:1)*(crit?CRIT_MULT:1)*vuln;
       const dmg=Math.round(m.dmg*mult*this.comboScale*pw);
-      const brink=this.hp>0 && this.hp<MAX_HP*BRINK;
-      this.hp=Math.max(0,this.hp-dmg);
-      if(crit&&brink){ this.hp=0; popText('ДОБИВАНИЕ',this.x,this.y-150,'#ff3355'); }
-      if(!this._critLatch && this.hp>0 && this.hp<MAX_HP*0.30){ this._critLatch=true; popText('КРИТИЧЕСКОЕ СОСТОЯНИЕ',this.x,this.y-168,'#ff3355'); FX.flash(14); }
-      if(this.hp>0 && this.hp<MAX_HP*0.30 && (region==='head'||region==='torso')){   // органы добивают
-        this.organs=Math.max(0,(this.organs==null?100:this.organs)-(crit?34:18)*(region==='head'?1.35:1));
-        if(this.organs<=0){ this.hp=0; popText('ВНУТРЕННЕЕ КРОВОТЕЧЕНИЕ',this.x,this.y-150,'#ff2a44'); FX.blood(this.x,this.y-72,fromFacing,30,2.2); FX.flash(20); } }
+      this.hp=Math.max(0,this.hp-dmg);                                   // стойкость
+      if(!this._critLatch && this.hp>0 && this.hp<MAX_HP*0.30){ this._critLatch=true; popText('СТОЙКОСТЬ НА ИЗЛОМЕ',this.x,this.y-168,'#ffd23f'); }
+      if(!this._exhaustLatch && this.hp<=0){ this._exhaustLatch=true; popText('СТОЙКОСТЬ СЛОМЛЕНА',this.x,this.y-168,'#ff3355'); FX.flash(16); SFX.crack(); shake(10); }
       let extra=0; if(region==='head')extra=8; else if(region==='leg')extra=4;
       this.state=ST.HITSTUN; this.t=m.hitstun+(counter?7:0)+(crit?6:0)+extra;
       this.vx=fromFacing*m.kx*(0.55+0.45*pw)*(crit?1.25:1);
@@ -502,7 +500,7 @@ class Fighter{
       const hy=isHeadHit(m,this)?this.y-118:this.y-78;
       if(crit){ for(let i=0;i<3;i++)FX.spark(this.x-fromFacing*8,this.y-90+i*16,'#ff3355',8,false);
         FX.blood(this.x-fromFacing*6,hy,fromFacing,18,1.7); FX.flash(16); FX.ring(this.x-fromFacing*6,hy,'#ff5566',true); camKick(0.06);
-        if(!brink && this.guard >= 100) popText('КРИТ!',this.x,this.y-132,'#ff3355'); SFX.counter(); SFX.crack(); hitstop(11); shake(12); }
+        if(this.guard >= 100) popText('КРИТ!',this.x,this.y-132,'#ff3355'); SFX.counter(); SFX.crack(); hitstop(11); shake(12); }
       else { FX.spark(this.x-fromFacing*10,this.y-78,counter?'#ff5577':'#fff3a8',counter?18:14,false);
         FX.blood(this.x-fromFacing*6,hy,fromFacing,counter?12:Math.round(4+m.dmg*0.05),counter?1.4:1);
         FX.ring(this.x-fromFacing*6,hy,counter?'#ff5577':'#ffe089',m.kx>=10); if(m.kx>=10||counter)camKick(0.04);
@@ -535,7 +533,7 @@ class Fighter{
     if(isSword()&&this.wounded&&this.animClock%10===0){ FX.parts.push({x:this.x+(Math.random()-.5)*14,y:this.y-26,vx:this.vx*0.3,vy:Math.random(),life:40,max:60,color:'#8a120c',r:2,blood:true}); }
     this.sx+=(1-this.sx)*0.16; this.sy+=(1-this.sy)*0.16;
     const dir=Math.sign(opp.x-this.x)||this.facing;
-    if(this.canAct()&&this.onGround)this.facing=dir;
+    if((this.state===ST.IDLE||this.state===ST.WALK)&&this.onGround)this.facing=dir;
 
     switch(this.state){
       case ST.HITSTUN: this.t--; if(this.t<=0){ this.combo=0; this.comboScale=1; this.state=this.onGround?ST.IDLE:ST.JUMP; } break;
@@ -898,7 +896,7 @@ function tick(){
   if(match.phase==='fight'&&match.banner){ match.phaseT--; if(match.phaseT<=0)match.banner=''; }
   if(match.phase==='fight'){ match.timeF--; match.time=Math.ceil(match.timeF/60); if(match.timeF<=0)timeOver(); }
   stepWorld(false); updateCam(); FX.update();
-  if(match.phase==='fight'&&!isSword()&&(p1.hp<=0||p2.hp<=0))knockout();
+  if(match.phase==='fight'&&!isSword()&&(p1._lethal||p2._lethal))knockout();
 }
 function stepWorld(frozen,ni1,ni2){
   const net=ni1!==undefined;
@@ -946,9 +944,11 @@ function simOne(i1,i2){
   if(match.phase==='fight'&&match.banner){ match.phaseT--; if(match.phaseT<=0)match.banner=''; }
   if(match.phase==='fight'){ match.timeF--; match.time=Math.ceil(match.timeF/60); if(match.timeF<=0)timeOver(); }
   stepWorld(false,i1,i2);
-  if(match.phase==='fight'&&!isSword()&&(p1.hp<=0||p2.hp<=0))knockout();
+  if(match.phase==='fight'&&!isSword()&&(p1._lethal||p2._lethal))knockout();
 }
 function pushApart(){ const gap=Math.abs(p1.x-p2.x),min=58;
+  const cross=(!p1.onGround||!p2.onGround)&&Math.abs(p1.y-p2.y)>54;   // в прыжке можно перепрыгнуть на другую сторону
+  if(cross)return;
   if(gap<min){ const push=(min-gap)/2,d=Math.sign(p1.x-p2.x)||1; p1.x+=push*d; p2.x-=push*d;
     p1.x=clamp(p1.x,WALL_L,WALL_R); p2.x=clamp(p2.x,WALL_L,WALL_R); } }
 function resolveHits(){ collide(p1,p2); collide(p2,p1); pushApart(); }
@@ -958,19 +958,25 @@ function collide(att,def){
   if(def.iframes>0||def.state===ST.KNOCKDOWN||def.state===ST.BACKDASH)return;
   if(aabb(hb,def.hurt)){
     def.lastHitBy=att.hitId; const ff=att.facing;
-    const blocked=def.blocksType(hb.m.type)&&((ff>0&&def.facing<0)||(ff<0&&def.facing>0));
+    const backHit=Math.sign(att.x-def.x)=== -def.facing && def.state!==ST.HITSTUN; // удар со спины
+    let blocked=def.blocksType(hb.m.type)&&((ff>0&&def.facing<0)||(ff<0&&def.facing>0));
+    if(backHit)blocked=false;                                   // со спины не заблокировать
     const counter=!blocked&&def.state===ST.ATTACK&&def.move&&!def.move._proj&&def.t<=def.move.start+(def.move.active||1);
     const region=hitRegion(hb,def), rk=regionKey(region);
     const lk=(region==='leg')?'leg':'arm', pw=lk==='arm'?armPow(att):legPow(att);
     let crit=false;
     if(!blocked){
-      if(counter) crit=true;                                  // переиграл на замахе
-      else if(def.broken[rk]) crit=true;                      // добиваем уже разбитую зону
-      else if(def.state===ST.STAGGER) crit=true;              // по оглушённому
-      else if(region==='head'&&def.limbs.head<45) crit=true;  // точно в повреждённую голову
+      if(backHit) crit=true;                                    // в спину — критический
+      else if(counter) crit=true;                               // переиграл на замахе
+      else if(def.broken[rk]) crit=true;                        // добиваем уже разбитую зону
+      else if(def.state===ST.STAGGER) crit=true;                // по оглушённому
+      else if(region==='head'&&def.limbs.head<45) crit=true;    // точно в повреждённую голову
     }
+    if(backHit&&!blocked)popText('В СПИНУ!',def.x,def.y-148,'#ff3355');
     def.takeHit(hb.m,ff,blocked,att,counter,pw,crit,region); att.vx-=ff*1.5;
-    if(!blocked)hurtLimbsRegion(def,region,hb.m,crit); else wearGuard(def,hb.m);
+    if(!blocked){ hurtLimbsRegion(def,region,hb.m,crit);
+      if(!isSword()&&def.hp<=0&&(def.limbs[rk]<=0||def.broken[rk]))def._lethal=true;  // стойкость сломлена → 0 в зоне = смерть
+    } else wearGuard(def,hb.m);
   }
 }
 /* ---- мечи ---- */
@@ -1090,10 +1096,10 @@ function endRoundWin(winner,banner,sub){
   match.koWinner=winner; match.banner=banner; match.sub=sub||''; koFlash=12; shake(16); camKick(0.08); SFX.ko();
 }
 function knockout(){
-  const p1dead=p1.hp<=0; const winner=p1dead?(p2.hp<=0?0:2):1;
+  const p1d=p1._lethal, p2d=p2._lethal; const winner=p1d?(p2d?0:2):(p2d?1:0);
   const w=winner===1?p1:winner===2?p2:null; const loser=winner===1?p2:winner===2?p1:null;
-  if(loser){ FX.blood(loser.x,loser.y-100,-loser.facing,32,2); FX.flash(18); }
-  endRoundWin(winner,(p1dead&&p2.hp<=0)?'ДВОЙНОЙ К.О.':'К.О.', (w&&w.hp>=MAX_HP)?'ИДЕАЛЬНО':'');
+  if(loser){ FX.blood(loser.x,loser.y-100,-loser.facing,40,2.4); FX.blood(loser.x,loser.y-70,loser.facing,24,1.8); FX.flash(20); }
+  endRoundWin(winner,(p1d&&p2d)?'ДВОЙНОЙ К.О.':'К.О.', (w&&w.hp>=MAX_HP)?'ИДЕАЛЬНО':'');
 }
 function timeOver(){ match.phase='roundend'; match.phaseT=110; match.banner='ВРЕМЯ'; match.sub='';
   match.koWinner=isSword()?0:(p1.hp===p2.hp?0:(p1.hp>p2.hp?1:2)); }
@@ -1524,10 +1530,14 @@ function drawBar(f,edge,left){
   ctx.save(); ctx.fillStyle='rgba(8,3,18,.75)'; roundRect(x-3,y-3,bw+6,bh+6,5); ctx.fill();
   f._dispHp=f._dispHp==null?f.hp:f._dispHp+(f.hp-f._dispHp)*0.12;
   const lag=Math.max(0,f._dispHp/MAX_HP),cur=Math.max(0,f.hp/MAX_HP);
-  ctx.fillStyle='rgba(255,255,255,.25)'; ctx.fillRect(left?x:x+bw*(1-lag),y,bw*lag,bh);
-  const grad=ctx.createLinearGradient(x,0,x+bw,0); grad.addColorStop(0,shade(f.color,30)); grad.addColorStop(1,f.color);
+  ctx.fillStyle='rgba(255,90,90,.45)'; ctx.fillRect(left?x:x+bw*(1-lag),y,bw*lag,bh);   // убыль красным
+  const stam = cur>0.5?'#5ad17a':cur>0.25?'#ffd23f':'#ff7a3a';                          // стойкость
+  const grad=ctx.createLinearGradient(x,0,x+bw,0); grad.addColorStop(0,shade(stam,20)); grad.addColorStop(1,stam);
   ctx.fillStyle=grad; ctx.fillRect(left?x:x+bw*(1-cur),y,bw*cur,bh);
-  ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fillRect(left?x:x+bw*(1-cur),y,bw*cur,bh*0.4); ctx.restore();
+  ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fillRect(left?x:x+bw*(1-cur),y,bw*cur,bh*0.4);
+  if(f.hp<=0){ ctx.globalAlpha=0.35+0.3*Math.sin(f.animClock*0.25); ctx.fillStyle='#ff2a44'; roundRect(x-3,y-3,bw+6,bh+6,5); ctx.fill(); ctx.globalAlpha=1;
+    ctx.fillStyle='#fff'; ctx.font='800 12px Segoe UI,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('СТОЙКОСТЬ СЛОМЛЕНА — БЕЙ В КОНЕЧНОСТИ',x+bw/2,y+bh/2); }
+  ctx.restore();
   
   // Guard Bar (Выносливость блока)
   const gy = y + bh + 1;
