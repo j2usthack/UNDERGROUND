@@ -1739,27 +1739,40 @@ const ICE_SERVERS=[
   {urls:'turn:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443?transport=tcp', username:'openrelayproject', credential:'openrelayproject'}
 ];
-function newPC(){ const pc=new RTCPeerConnection({iceServers:ICE_SERVERS, iceCandidatePoolSize:4});
+function candSummary(pc){ const c=pc._cand||{}; const parts=[];
+  parts.push('свои '+(c.host||0)); if(c.srflx)parts.push('через STUN '+c.srflx); if(c.relay)parts.push('через TURN '+c.relay);
+  if(!c.srflx&&!c.relay)parts.push('(публичных нет — выход в интернет может не подняться)');
+  return 'адреса: '+parts.join(', '); }
+function newPC(){ let pc;
+  try{ pc=new RTCPeerConnection({iceServers:ICE_SERVERS}); }
+  catch(e){ try{ pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]}); }
+    catch(e2){ netStatus('WebRTC недоступен в этом браузере/режиме'); throw e2; } }
+  pc._cand={host:0,srflx:0,relay:0};
+  pc.onicecandidate=e=>{ if(e&&e.candidate){ const cd=e.candidate; let t=cd.type;
+    if(!t){ const mm=(cd.candidate||'').match(/ typ (\w+)/); t=mm&&mm[1]; }
+    if(t&&pc._cand[t]!==undefined)pc._cand[t]++; } };
+  pc.onicecandidateerror=()=>{ pc._iceErr=(pc._iceErr||0)+1; };
   pc.oniceconnectionstatechange=()=>{ const s=pc.iceConnectionState;
-    if(s==='checking')netStatus('Установка соединения…');
+    if(s==='checking')netStatus('Установка соединения… ('+candSummary(pc)+')');
     else if(s==='connected'||s==='completed'){ if(!NET.active)netStatus('Соединено'); }
-    else if(s==='failed')netStatus('Не удалось соединиться. Проверьте код/сеть; при строгом NAT нужен рабочий TURN.');
+    else if(s==='failed')netStatus('Соединение не встало. '+candSummary(pc)+'. При строгом NAT нужен рабочий TURN.');
     else if(s==='disconnected')netStatus('Связь прервана…'); };
   return pc; }
-async function netHost(){ netReset(); NET.role='host'; NET.localPlayer=1; NET.pc=newPC();
+async function netHost(){ try{ netReset(); NET.role='host'; NET.localPlayer=1; NET.pc=newPC();
   NET.dc=NET.pc.createDataChannel('g',{ordered:false,maxRetransmits:0}); netBindDC();
   const off=await NET.pc.createOffer(); await NET.pc.setLocalDescription(off);
   netStatus('Сбор сетевых адресов… (до 6 сек)'); await netIceDone(NET.pc);
   netShowCode(btoa(JSON.stringify(NET.pc.localDescription)));
-  netStatus('Код-приглашение готов. Скопируйте, отправьте второму игроку. Затем вставьте сюда его ответный код и нажмите «Готово».'); }
-async function netGuestJoin(code){ netReset(); NET.role='guest'; NET.localPlayer=2; NET.pc=newPC();
+  netStatus('Код готов ('+candSummary(NET.pc)+'). Скопируйте и отправьте сопернику; затем вставьте его ответный код и «Готово».');
+  }catch(e){ netStatus('Ошибка создания игры: '+(e&&e.message||e)); } }
+async function netGuestJoin(code){ try{ netReset(); NET.role='guest'; NET.localPlayer=2; NET.pc=newPC();
   NET.pc.ondatachannel=e=>{ NET.dc=e.channel; netBindDC(); };
-  let off; try{ off=JSON.parse(atob(code.trim())); }catch(e){ netStatus('Неверный код хоста'); return; }
-  try{ await NET.pc.setRemoteDescription(off); const ans=await NET.pc.createAnswer();
-    await NET.pc.setLocalDescription(ans); netStatus('Сбор сетевых адресов… (до 6 сек)'); await netIceDone(NET.pc);
-    netShowCode(btoa(JSON.stringify(NET.pc.localDescription)));
-    netStatus('Ответный код готов. Скопируйте и отправьте хосту — игра начнётся автоматически.'); }
-  catch(e){ netStatus('Ошибка подключения'); } }
+  let off; try{ off=JSON.parse(atob(code.trim())); }catch(e){ netStatus('Неверный код хоста (скопирован не полностью?)'); return; }
+  await NET.pc.setRemoteDescription(off); const ans=await NET.pc.createAnswer();
+  await NET.pc.setLocalDescription(ans); netStatus('Сбор сетевых адресов… (до 6 сек)'); await netIceDone(NET.pc);
+  netShowCode(btoa(JSON.stringify(NET.pc.localDescription)));
+  netStatus('Ответный код готов ('+candSummary(NET.pc)+'). Скопируйте и отправьте хосту — игра начнётся сама.');
+  }catch(e){ netStatus('Ошибка подключения: '+(e&&e.message||e)); } }
 async function netHostAccept(code){ let ans; try{ ans=JSON.parse(atob(code.trim())); }catch(e){ netStatus('Неверный ответный код'); return; }
   try{ await NET.pc.setRemoteDescription(ans); netStatus('Подключение…'); }catch(e){ netStatus('Не удалось принять ответ'); } }
 function netShowCode(c){ const t=document.getElementById('netCode'); if(t)t.value=c; }
