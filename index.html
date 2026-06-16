@@ -75,6 +75,10 @@
   #mute:hover{border-color:var(--acc)}
   #touch{position:fixed;inset:0;z-index:30;display:none}
   #touch.show{display:block}
+  @media (pointer:coarse){ .tbtn.dir{width:66px;height:66px} .tbtn.act{width:74px;height:74px} .tbtn.thr{width:62px;height:62px} }
+  #rotate{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;text-align:center;
+    background:#0a0710;color:#ffd23f;font:800 20px system-ui,sans-serif;padding:30px;letter-spacing:.5px}
+  @media (orientation:portrait){ body.touch #rotate{display:flex} }
   .tbtn{position:absolute;display:flex;align-items:center;justify-content:center;border-radius:50%;
     background:rgba(20,8,38,.42);border:2px solid rgba(246,236,255,.28);color:#fff;font-weight:900;font-size:15px;
     backdrop-filter:blur(2px);touch-action:none;-webkit-tap-highlight-color:transparent}
@@ -118,19 +122,29 @@
 
   <div id="net" class="overlay hidden">
     <button class="btn back" data-act="menu">← Назад</button>
-    <div class="title" style="font-size:clamp(24px,5vw,46px)">ПО СЕТИ · ИНТЕРНЕТ/LAN</div>
+    <div class="title" style="font-size:clamp(24px,5vw,46px)">ПО СЕТИ · ОНЛАЙН</div>
     <div class="menu">
+      <div style="font-weight:800;color:var(--acc);font-size:13px;letter-spacing:.5px">КОМНАТА (с любого устройства, любая точка мира)</div>
       <div class="row">
-        <button class="btn primary" data-net="host" style="flex:1;justify-content:center">Создать игру (хост)</button>
+        <input id="roomCode" placeholder="КОД КОМНАТЫ" maxlength="12" autocomplete="off" autocapitalize="characters"
+          style="flex:1;min-width:0;text-align:center;border-radius:10px;border:2px solid var(--line);background:rgba(20,16,12,.7);color:var(--ink);font:800 18px monospace;letter-spacing:3px;padding:10px">
+        <button class="btn" data-net="randroom" style="justify-content:center">🎲</button>
+      </div>
+      <button class="btn primary" data-net="room" style="width:100%;justify-content:center;font-size:16px">Играть онлайн</button>
+      <div class="hint" id="netStatus">Введите любой одинаковый код на двух устройствах и нажмите «Играть онлайн» — соединение поднимется само (через интернет, без копирования кодов). «🎲» — случайный код, отправьте его сопернику.</div>
+
+      <details style="margin-top:8px"><summary style="cursor:pointer;color:var(--muted);font-size:12px">Прямое подключение (LAN / без сервера, копипаст кода)</summary>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" data-net="host" style="flex:1;justify-content:center">Создать (хост)</button>
         <button class="btn" data-net="guest" style="flex:1;justify-content:center">Я гость</button>
       </div>
       <textarea id="netCode" placeholder="Код подключения вставляется/появляется здесь"
-        style="width:100%;height:90px;resize:none;border-radius:10px;border:2px solid var(--line);background:rgba(20,16,12,.7);color:var(--ink);font:600 11px monospace;padding:10px"></textarea>
+        style="width:100%;height:80px;resize:none;border-radius:10px;border:2px solid var(--line);background:rgba(20,16,12,.7);color:var(--ink);font:600 11px monospace;padding:10px;margin-top:8px"></textarea>
       <div class="row">
-        <button class="btn" data-net="copy" style="flex:1;justify-content:center">Копировать код</button>
-        <button class="btn primary" data-net="go" style="flex:1;justify-content:center">Готово / Подключиться</button>
+        <button class="btn" data-net="copy" style="flex:1;justify-content:center">Копировать</button>
+        <button class="btn primary" data-net="go" style="flex:1;justify-content:center">Готово</button>
       </div>
-      <div class="hint" id="netStatus">Работает и через интернет (можно с GitHub Pages). Хост: «Создать игру» → подождите сбор адресов → код появится ниже → отправьте его сопернику любым способом (Telegram/Discord). Гость: «Я гость» → вставьте код хоста → «Готово» → отправьте свой ответный код назад. Хост вставляет ответ → «Готово». Прямое P2P-соединение, при строгом NAT — через TURN-ретрансляцию.</div>
+      </details>
     </div>
   </div>
 
@@ -190,6 +204,7 @@
   <button class="tbtn act" data-code="KeyH" style="right:10px;bottom:120px">СП</button>
   <button class="tbtn thr" data-code="KeyR" style="right:84px;bottom:20px">БР</button>
 </div>
+<div id="rotate">↻ Поверните устройство горизонтально</div>
 
 <script>
 "use strict";
@@ -1656,18 +1671,59 @@ let acc=0,last=performance.now(),running=false,slowPar=0;
 /* =========================================================================
    СЕТЕВАЯ ИГРА (LAN, P2P через WebRTC, lockstep с буфером ввода = без лага на LAN)
    ========================================================================= */
-const NET={ active:false, pc:null, dc:null, role:null, localPlayer:1, connected:false,
+const NET={ active:false, pc:null, dc:null, mqtt:null, transport:'rtc', room:null, myId:null, myNonce:0, peerId:null, started:false, _startSent:false, _ping:null, role:null, localPlayer:1, connected:false,
   head:0, confirmed:-1, lastRemote:0, li:{}, ri:{}, conf:{},
   BUF:24, MAXROLL:14, MAXPRED:10, K:6, snap:[], snapF:[] };
-function netReset(){ try{ if(NET.dc)NET.dc.close(); if(NET.pc)NET.pc.close(); }catch(e){} stopNetClock();
-  NET.pc=null; NET.dc=null; NET.role=null; NET.connected=false; NET.active=false;
+function netReset(){ try{ if(NET.dc)NET.dc.close(); if(NET.pc)NET.pc.close(); if(NET.mqtt)NET.mqtt.end(true); }catch(e){}
+  if(NET._ping)clearInterval(NET._ping); NET._ping=null; stopNetClock();
+  NET.pc=null; NET.dc=null; NET.mqtt=null; NET.transport='rtc'; NET.room=null; NET.peerId=null; NET.started=false; NET._startSent=false;
+  NET.role=null; NET.connected=false; NET.active=false;
   NET.head=0; NET.confirmed=-1; NET.lastRemote=0; NET.li={}; NET.ri={}; NET.conf={}; NET.snap=[]; NET.snapF=[]; REPLAY=false; }
 function netEncode(map){ let b=0; const K=k=>keys.has(k);
   if(K(map.left))b|=1; if(K(map.right))b|=2; if(K(map.up))b|=4; if(K(map.down))b|=8;
   if(map.light.some(K))b|=16; if(map.heavy.some(K))b|=32; if(map.special.some(K))b|=64; if(map.throwk.some(K))b|=128; return b; }
 function netIntent(bits,prev){ const H=m=>!!(bits&m), P=m=>((bits&m)&&!(prev&m));
   return {left:H(1),right:H(2),up:P(4),upHeld:H(4),down:H(8),light:P(16),heavy:P(32),special:P(64),throw:P(128)}; }
-function netSend(o){ try{ if(NET.dc&&NET.dc.readyState==='open')NET.dc.send(JSON.stringify(o)); }catch(e){} }
+function netSend(o){ try{
+  if(NET.transport==='mqtt'){ if(NET.mqtt&&NET.mqtt.connected)NET.mqtt.publish('kletka/'+NET.room+'/m',JSON.stringify({id:NET.myId,d:o}),{qos:0}); }
+  else if(NET.dc&&NET.dc.readyState==='open')NET.dc.send(JSON.stringify(o));
+}catch(e){} }
+const MQTT_BROKERS=['wss://broker.emqx.io:8084/mqtt','wss://test.mosquitto.org:8081/mqtt'];
+let MQTT_BROKER=MQTT_BROKERS[0], _mqttP=null;
+function loadMQTT(){ if(window.mqtt)return Promise.resolve(window.mqtt); if(_mqttP)return _mqttP;
+  _mqttP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://unpkg.com/mqtt@5/dist/mqtt.min.js'; s.async=true;
+    s.onload=()=>window.mqtt?res(window.mqtt):rej(new Error('lib')); s.onerror=()=>rej(new Error('load')); document.head.appendChild(s); });
+  return _mqttP; }
+function genRoom(){ const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let r=''; for(let i=0;i<5;i++)r+=a[Math.floor(Math.random()*a.length)]; return r; }
+async function netRoomConnect(room){
+  netReset(); room=(room||'').trim().toUpperCase(); if(!room){ netStatus('Введите код комнаты'); return; }
+  NET.transport='mqtt'; NET.room=room; NET.myId=Math.random().toString(36).slice(2,9); NET.myNonce=Math.floor(Math.random()*1e9);
+  let lib; try{ netStatus('Загрузка сетевого модуля…'); lib=await loadMQTT(); }catch(e){ netStatus('Нет интернета или модуль не загрузился'); return; }
+  const SIG='kletka/'+room+'/sig', MSG='kletka/'+room+'/m'; let bi=0;
+  function onMessage(topic,payload){ let m; try{m=JSON.parse(payload.toString());}catch(e){return;}
+    if(topic===SIG){ if(m.id===NET.myId||NET.started)return; NET.peerId=m.id;
+      const amHost=(NET.myNonce<m.nonce)||(NET.myNonce===m.nonce&&NET.myId<m.id);
+      if(amHost){ if(!NET._startSent){ NET._startSent=true; NET.localPlayer=1; NET.role='host';
+        setTimeout(()=>{ if(NET.started)return; NET.started=true; if(NET._ping)clearInterval(NET._ping);
+          netSend({t:'start',style:gameStyle,arena:arenaIdx}); beginNetMatch(); netStatus('Соперник найден — бой!'); },650); }
+      } else { NET.localPlayer=2; NET.role='guest'; netStatus('Соперник найден, ждём старт…'); }
+    } else if(topic===MSG){ if(m.id===NET.myId)return;
+      if(m.d&&m.d.t==='start'&&!NET.started){ NET.localPlayer=NET.localPlayer===1?1:2; NET.role=NET.role||'guest'; NET.started=true; if(NET._ping)clearInterval(NET._ping); }
+      netOnMsg({data:JSON.stringify(m.d)}); }
+  }
+  function tryBroker(){ const url=MQTT_BROKERS[bi]; netStatus('Подключение к ретранслятору '+(bi+1)+'/'+MQTT_BROKERS.length+'…');
+    let ok=false; const cl=lib.connect(url,{clientId:'kletka_'+NET.myId,clean:true,connectTimeout:8000,reconnectPeriod:0,keepalive:30}); NET.mqtt=cl;
+    const next=()=>{ try{cl.end(true);}catch(e){} if(bi<MQTT_BROKERS.length-1){ bi++; tryBroker(); } else netStatus('Ретрансляторы недоступны — проверьте интернет или попробуйте позже.'); };
+    cl.on('connect',()=>{ ok=true; cl.subscribe([SIG,MSG],{qos:0},()=>{ netStatus('Комната «'+room+'». Ждём соперника… (тот же код на другом устройстве)');
+      const ping=()=>{ if(NET.started){ clearInterval(NET._ping); return; } cl.publish(SIG,JSON.stringify({id:NET.myId,nonce:NET.myNonce})); };
+      NET._ping=setInterval(ping,900); ping(); }); });
+    cl.on('message',onMessage);
+    cl.on('error',()=>{ if(!ok)next(); });
+    cl.on('close',()=>{ if(NET.active){ NET.active=false; running=false; if(match)match.over=true; netStatus('Связь потеряна'); showScreen('net'); } });
+    setTimeout(()=>{ if(!ok&&NET.mqtt===cl)next(); },9000);
+  }
+  tryBroker();
+}
 function netOnMsg(ev){ let m; try{m=JSON.parse(ev.data);}catch(e){return;}
   if(m.t==='in'){ const end=m.f, arr=m.b; for(let i=0;i<arr.length;i++)netRecv(end-(arr.length-1)+i,arr[i]); }
   else if(m.t==='start'||m.t==='rematch'){ gameStyle=m.style; if(m.arena!==undefined)arenaIdx=m.arena; beginNetMatch(); } }
@@ -1808,6 +1864,7 @@ requestAnimationFrame(loop);
 let menuState='main';
 const screens={main:'mainMenu',howto:'howto',pause:'pause',result:'result',net:'net'};
 const TOUCH=(window.matchMedia&&matchMedia('(pointer:coarse)').matches)||('ontouchstart'in window);
+if(TOUCH)document.body.classList.add('touch');
 function showScreen(s){ for(const id of Object.values(screens))document.getElementById(id).classList.add('hidden');
   if(s!=='game')document.getElementById(screens[s]).classList.remove('hidden'); menuState=s; updateTouch();
   if(s==='game')SFX.startMusic(); else SFX.stopMusic(); }
@@ -1821,7 +1878,7 @@ function toggleMute(){ SFX.unlock(); document.getElementById('mute').textContent
 document.body.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]'); if(b){ SFX.unlock(); const a=b.dataset.act; if(a!=='mute')SFX.ui();
     if(a==='solo')startGame('solo'); if(a==='versus')startGame('versus'); if(a==='howto')showScreen('howto');
-    if(a==='net'){ netReset(); netStatus('Хост: «Создать игру» → отправьте код. Гость: «Я гость» → вставьте код хоста → «Готово».'); netShowCode(''); showScreen('net'); }
+    if(a==='net'){ netReset(); netStatus('Введите одинаковый код на двух устройствах → «Играть онлайн». Или 🎲 для случайного кода.'); netShowCode(''); showScreen('net'); }
     if(a==='menu'){ running=false; if(NET.active||NET.pc)netReset(); if(match)match.over=true; showScreen('main'); }
     if(a==='resume')togglePause();
     if(a==='restart'){ if(mode==='net'){ if(NET.role==='host'){ netSend({t:'start',style:gameStyle,arena:arenaIdx}); beginNetMatch(); } }
@@ -1830,6 +1887,8 @@ document.body.addEventListener('click',e=>{
   const n=e.target.closest('[data-net]'); if(n){ SFX.unlock(); SFX.ui(); const a=n.dataset.net;
     const code=()=>document.getElementById('netCode').value;
     if(a==='host')netHost();
+    else if(a==='room'){ const r=document.getElementById('roomCode'); netRoomConnect(r?r.value:''); }
+    else if(a==='randroom'){ const r=document.getElementById('roomCode'); if(r){ r.value=genRoom(); netStatus('Код «'+r.value+'» — отправьте сопернику, оба нажмите «Играть онлайн».'); } }
     else if(a==='guest'){ NET.role='guest'; netShowCode(''); netStatus('Вставьте код хоста и нажмите «Готово».'); }
     else if(a==='go'){ if(NET.role==='host'&&NET.pc)netHostAccept(code()); else netGuestJoin(code()); }
     else if(a==='copy'){ const t=document.getElementById('netCode'); t.select();
