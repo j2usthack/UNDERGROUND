@@ -836,6 +836,18 @@ function updateCam(){
   cam.x+=(tx-cam.x)*0.12;
   cam.kick*=0.82; if(cam.kick<0.002)cam.kick=0;
 }
+// Конец раунда: кинематографичный ОТЪЕЗД камеры + фокус на жертве фаталити (а не наезд на победителя)
+function roundEndCam(){
+  if(!p1||!p2)return;
+  const loser = match.koWinner===1?p2:(match.koWinner===2?p1:null);
+  const focus = loser ? loser.x*0.76 + (loser===p1?p2.x:p1.x)*0.24 : (p1.x+p2.x)/2;  // кадрируем жертву фаталити
+  const targetZ=0.86;                                  // отъезд от тесного KO-кадра, но расправа крупно и в центре
+  cam.z+=(targetZ-cam.z)*0.06;                          // плавный отъезд
+  const vhalf=(W/cam.z)/2; let tx=focus;
+  if(WORLD_W<=2*vhalf)tx=WORLD_W/2; else tx=clamp(focus,vhalf,WORLD_W-vhalf);
+  cam.x+=(tx-cam.x)*0.06;
+  cam.kick*=0.82; if(cam.kick<0.002)cam.kick=0;
+}
 
 /* =========================================================================
    BOT
@@ -917,7 +929,7 @@ function tick(){
   if(match.phase==='intro'){ match.phaseT--; updateCam();
     if(match.phaseT<=0){ match.phase='fight'; match.banner='БОЙ!'; match.sub=''; match.phaseT=42; } FX.update(); return; }
   if(match.phase==='roundend'){ match.phaseT--; if(match.slowmo>0)match.slowmo--;
-    match.zoom=Math.min(1,match.zoom+0.06); stepWorld(true); FX.update(); if(match.phaseT<=0)afterRound(); return; }
+    match.zoom=Math.min(1,match.zoom+0.05); stepWorld(true); roundEndCam(); FX.update(); if(match.phaseT<=0)afterRound(); return; }
   if(match.phase==='fight'&&match.banner){ match.phaseT--; if(match.phaseT<=0)match.banner=''; }
   if(match.phase==='fight'){ match.timeF--; match.time=Math.ceil(match.timeF/60); if(match.timeF<=0)timeOver(); }
   stepWorld(false); updateCam(); FX.update();
@@ -965,7 +977,7 @@ function simOne(i1,i2){
   if(match.phase==='intro'){ match.phaseT--;
     if(match.phaseT<=0){ match.phase='fight'; match.banner='БОЙ!'; match.sub=''; match.phaseT=42; } return; }
   if(match.phase==='roundend'){ match.phaseT--; if(match.slowmo>0)match.slowmo--;
-    match.zoom=Math.min(1,match.zoom+0.06); stepWorld(true,i1,i2); if(match.phaseT<=0)afterRound(); return; }
+    match.zoom=Math.min(1,match.zoom+0.05); stepWorld(true,i1,i2); roundEndCam(); if(match.phaseT<=0)afterRound(); return; }
   if(match.phase==='fight'&&match.banner){ match.phaseT--; if(match.phaseT<=0)match.banner=''; }
   if(match.phase==='fight'){ match.timeF--; match.time=Math.ceil(match.timeF/60); if(match.timeF<=0)timeOver(); }
   stepWorld(false,i1,i2);
@@ -1157,7 +1169,7 @@ function endMatch(){ match.over=true; const t=document.getElementById('resultTit
 function render(){
   const off=FX.offset();
   const koZoom=(match.phase==='roundend')?match.zoom:0;
-  const z=cam.z*(1+0.16*koZoom)*(1+cam.kick);
+  const z=cam.z*(1+cam.kick);   // отъезд на роунд-энде делает roundEndCam через cam.z (не наезд)
   const fy=300, a=curArena(), T=(p1?p1.animClock:0);
   ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H);
   drawSky(a);
@@ -1177,6 +1189,10 @@ function render(){
   if(koFlash>0){ ctx.fillStyle=`rgba(255,255,255,${0.5*koFlash/12})`; ctx.fillRect(0,0,W,H); }
   if(FX.redFlash>0){ const aa=0.5*FX.redFlash/16; const vg=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.75);
     vg.addColorStop(0,'rgba(140,0,0,0)'); vg.addColorStop(1,`rgba(150,0,0,${aa})`); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
+  if(koZoom>0){   // КИНЕМАТОГРАФИЧНАЯ РАМКА ФАТАЛИТИ: чёрные полосы + кровавая виньетка
+    const bar=Math.round(48*koZoom); ctx.fillStyle='#000'; ctx.fillRect(0,0,W,bar); ctx.fillRect(0,H-bar,W,bar);
+    const vg=ctx.createRadialGradient(W/2,H*0.5,H*0.22,W/2,H*0.5,H*0.72);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,`rgba(48,0,0,${0.5*koZoom})`); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
   drawHUD(); drawBanner();
 }
 function drawSky(a){ const g=ctx.createLinearGradient(0,0,0,H);
@@ -1263,14 +1279,21 @@ function computePose(f){
   let legA={x:f.x-12,y:GROUND_Y},legB={x:f.x+12,y:GROUND_Y};
   const breathe=Math.sin(A*0.08)*2;
   switch(f.state){
-    case ST.IDLE: { const bob=Math.sin(A*0.11)*2.2, sway=Math.sin(A*0.055);   // боксёрский ритм: пружинит + перенос веса
-      headY=f.y-122+bob; hipY=f.y-62+bob; torsoLean=7*dir+sway*2.2;
-      legB={x:f.x+18*dir,y:GROUND_Y-Math.max(0,bob)*0.5}; legA={x:f.x-17*dir,y:GROUND_Y-Math.max(0,-bob)*0.5}; // боевая стойка, лёгкое перекатывание
-      armB={x:f.x+16*dir+sway*2,y:f.y-110+bob}; armA={x:f.x+8*dir,y:f.y-104+bob*0.7}; break; } // кулаки у подбородка
+    case ST.IDLE: { const bob=Math.sin(A*0.11)*2.2, sway=Math.sin(A*0.055), wsh=Math.sin(A*0.11);   // боксёрский ритм
+      hipY=f.y-60+bob;                                                  // колени согнуты (амортизация) — таз ниже
+      headY=f.y-120+bob; torsoLean=8*dir+sway*2.2;                       // подбородок подобран (голова вперёд-вниз)
+      legB={x:f.x+17*dir,y:GROUND_Y-3-Math.max(0,wsh)*2.0};             // вес на носках: пятки чуть оторваны,
+      legA={x:f.x-16*dir,y:GROUND_Y-3-Math.max(0,-wsh)*2.0};            // перекат веса с ноги на ногу
+      armB={x:f.x+26*dir+sway*2,y:f.y-110+bob}; armA={x:f.x+14*dir,y:f.y-112+bob*0.7}; break; } // ведущая кисть вынесена → локоть ложится к рёбрам, не торчит назад
     case ST.CRAWL:{ const st=Math.sin(A*0.22); hipY=f.y-20; headY=f.y-32; torsoLean=18*dir;
       armA={x:f.x-8*dir,y:f.y-6}; armB={x:f.x+(24+12*st)*dir,y:f.y-6};
       legA={x:f.x-(26+6*st),y:GROUND_Y}; legB={x:f.x-12,y:GROUND_Y}; break; }
-    case ST.WALK:{ const spd=Math.abs(f.vx), ph=f.stepPhase, amp=clamp(10+spd*2.0,11,22);
+    case ST.WALK:{
+      if(f.dashT>0){ const lead=Math.sign(f.vx)||dir;   // РЫВОК: CoM выносится вперёд, тело единой линией от задней пятки до макушки
+        torsoLean=13*lead; hipY=f.y-60; headY=f.y-126;
+        legB={x:f.x+24*lead,y:GROUND_Y}; legA={x:f.x-22*lead,y:GROUND_Y-7};   // задняя нога толкает (пятка вверх), передняя вынесена
+        armB={x:f.x+14*dir,y:f.y-108}; armA={x:f.x+6*dir,y:f.y-103}; break; }  // гард собран
+      const spd=Math.abs(f.vx), ph=f.stepPhase, amp=clamp(10+spd*2.0,11,22);
       const s1=Math.sin(ph)*amp, s2=Math.sin(ph+Math.PI)*amp;
       const lift1=Math.max(0,Math.sin(ph))*(9+spd), lift2=Math.max(0,Math.sin(ph+Math.PI))*(9+spd);  // колено отрывается от пола
       const dip=Math.abs(Math.sin(ph))*(3.0+spd*0.5);        // центр тяжести вниз на опорной ноге
@@ -1293,12 +1316,24 @@ function computePose(f){
     case ST.BLOCK: headY+=1; torsoLean=-2*dir; armB={x:f.x+19*dir,y:f.y-110}; armA={x:f.x+14*dir,y:f.y-98};
       if(f.crouch){ hipY=f.y-34; headY=f.y-80; legA={x:f.x-18,y:GROUND_Y}; legB={x:f.x+18,y:GROUND_Y}; armB.y=f.y-58; armA.y=f.y-48; } break;
     case ST.HITSTUN:{ const snap=Math.max(0,(f.t-2))*1.4, r=f.lastRegion;
-      if(r==='head'){ headY=f.y-118+5-snap*0.4; torsoLean=18*dir+snap*1.1*dir;     // голова откидывается
-        armA={x:f.x-20*dir,y:f.y-82}; armB={x:f.x-8*dir,y:f.y-96}; }
-      else if(r==='leg'){ hipY=f.y-46+snap*0.8; headY=f.y-108+snap*0.5; torsoLean=8*dir;   // подкашивается
-        legB={x:f.x+8*dir,y:GROUND_Y}; legA={x:f.x-20*dir,y:GROUND_Y}; armA={x:f.x-12*dir,y:f.y-76}; armB={x:f.x+4*dir,y:f.y-72}; }
-      else { torsoLean=14*dir+snap*1.2*dir; headY=f.y-110+6+snap*0.5; hipY=f.y-56;   // сгибается от удара в корпус
-        armA={x:f.x-10*dir,y:f.y-66}; armB={x:f.x+6*dir,y:f.y-62}; }
+      if(r==='head'){               // WHIPLASH: голову отбрасывает назад, шея выгибается, колени подкашиваются
+        const w=snap;
+        torsoLean=(20+w*1.5)*dir;                                   // корпус отлетает назад от удара
+        headY=f.y-120-w*0.5;                                        // голова запрокидывается (хлыст)
+        hipY=f.y-50+Math.min(22,w*1.3);                             // потеря тонуса: таз проваливается вниз
+        armA={x:f.x-(20+w*0.5)*dir,y:f.y-80}; armB={x:f.x-(8+w*0.4)*dir,y:f.y-94};  // руки взлетают и обвисают
+        legA={x:f.x-20*dir,y:GROUND_Y}; legB={x:f.x+11*dir,y:GROUND_Y}; }           // ноги разъезжаются
+      else if(r==='leg'){           // подлом ноги: колено внутрь, вес на здоровую, корпус перекашивает
+        const w=snap;
+        hipY=f.y-44+Math.min(18,w*0.9); headY=f.y-106+w*0.4; torsoLean=(10+w*0.4)*dir;
+        legB={x:f.x+3*dir,y:GROUND_Y}; legA={x:f.x-(22+w*0.3)*dir,y:GROUND_Y};      // подбитая нога уезжает
+        armA={x:f.x-12*dir,y:f.y-78}; armB={x:f.x+4*dir,y:f.y-74}; }
+      else {                        // КОРПУС/ПЕЧЕНЬ: складывается пополам, локти к животу, голова вниз, подсед
+        const w=snap;
+        torsoLean=(16+w*1.2)*dir; headY=f.y-100+Math.min(26,w*1.1);  // резко сгибается, голова падает вниз
+        hipY=f.y-52+Math.min(16,w*0.7);                              // ноги подгибаются
+        armA={x:f.x+2*dir,y:f.y-56}; armB={x:f.x+9*dir,y:f.y-52};    // локти инстинктивно к печени/животу
+        legA={x:f.x-16*dir,y:GROUND_Y}; legB={x:f.x+13*dir,y:GROUND_Y}; }
       break; }
     case ST.ATTACK:{ const P=poseAttack(f); armA=P.armA;armB=P.armB;legA=P.legA;legB=P.legB;headY=P.headY;hipY=P.hipY;torsoLean=P.torsoLean; break; }
   }
@@ -1324,6 +1359,14 @@ function computePose(f){
   }
   return {armA,armB,legA,legB,headY,hipY,torsoLean};
 }
+// Фазы удара: anti — взвод/предзамах, exec — выброс, rec — упругий возврат к гарду.
+function atkPhase(f,m){
+  if(!m)return {anti:0,exec:0.2,rec:0};
+  const s=m.start, a=m.active||3, r=m.recover||8, t=f.t;
+  if(t<s){ const k=t/Math.max(1,s); return {anti:Math.sin(k*Math.PI*0.9), exec:0, rec:0}; }   // плечо отходит назад, таз скручивается
+  if(t<s+a){ return {anti:0, exec:1, rec:0}; }                                                 // резкий выброс
+  const k=(t-s-a)/Math.max(1,r); return {anti:0, exec:Math.max(0,1-k*1.7), rec:clamp(k*1.25,0,1)};
+}
 function poseAttack(f){
   const dir=f.facing, raw=f.moveName||'', name=raw.startsWith('s_')?raw.slice(2):raw, m=f.move;
   let headY=f.y-118,hipY=f.y-58,torsoLean=0;
@@ -1331,28 +1374,61 @@ function poseAttack(f){
   let armA={x:f.x+6*dir,y:f.y-104},armB={x:f.x+14*dir,y:f.y-108};
   let ext; if(!m)ext=0.2; else if(f.t<m.start)ext=0.18; else if(f.t<m.start+(m.active||3))ext=1;
   else ext=0.55*(1-(f.t-(m.start+(m.active||3)))/Math.max(1,(m.recover||8))); ext=clamp(ext,0,1);
-  if(name==='light'){ const a=ext; armB={x:f.x+(20+52*a)*dir,y:f.y-107+2*a}; armA={x:f.x+7*dir,y:f.y-104}; torsoLean=6*dir*a;
-    legB={x:f.x+(12+10*a)*dir,y:GROUND_Y}; legA={x:f.x-14*dir,y:GROUND_Y}; }   // джеб с подшагом
-  else if(name==='heavy'||name==='super'){ const a=ext;            // кросс/оверхенд: выпад вперёд + толчок задней ногой
-    armB={x:f.x+(22+62*a)*dir,y:f.y-101}; armA={x:f.x+(3+5*a)*dir,y:f.y-101}; torsoLean=12*dir*a;
-    legB={x:f.x+(12+22*a)*dir,y:GROUND_Y};                          // передняя нога делает шаг-выпад
-    legA={x:f.x-(16+14*a)*dir,y:GROUND_Y-Math.max(0,a-0.45)*14};    // задняя пятка отрывается — проводка бедром
-    hipY=f.y-58+2*a;
-    if(name==='super')armB.y=f.y-104; }
+  const ph=atkPhase(f,m), ex=ph.exec, an=ph.anti, rc=ph.rec;
+  // позы гарда (куда рука УПРУГО возвращается — к челюсти, не вниз)
+  const gBx=f.x+16*dir, gBy=f.y-110, gAx=f.x+8*dir, gAy=f.y-104;
+  const toGuard=(arm)=>{ arm.x+=(gBx-arm.x)*rc*0.92; arm.y+=(gBy-arm.y)*rc*0.92; };
+  if(name==='light'){            // ДЖЕБ: быстрый щелчок передней; задняя приклеена к лицу, плечо прикрывает челюсть
+    torsoLean=(2+7*ex)*dir;
+    armB={x:f.x+(16-7*an+58*ex)*dir, y:f.y-109-2*ex+1.5*an};   // взвод чуть назад → вылет
+    armA={x:gAx,y:gAy};
+    legB={x:f.x+(12+9*ex)*dir,y:GROUND_Y}; legA={x:f.x-14*dir,y:GROUND_Y};
+    toGuard(armB); }
+  else if(name==='heavy'||name==='super'){   // КРОСС: разворот задней стопы + вкрут бедра, на контакте — жёсткая конструкция
+    torsoLean=(-8*an+15*ex)*dir;                                  // коил назад → вкрут вперёд
+    hipY=f.y-58+3*ex;
+    armB={x:f.x+(14-11*an+58*ex)*dir, y:f.y-101-3.5*an};          // кулак уходит на взводе, вылетает на ударе
+    armA={x:gAx+5*ex*dir, y:gAy};                                 // задняя рука держит подбородок
+    legB={x:f.x+(12+22*ex)*dir, y:GROUND_Y};                      // передняя нога — выпад
+    legA={x:f.x-(16+12*ex)*dir, y:GROUND_Y-Math.max(0,ex-0.4)*16};// задняя пятка отрывается (разворот стопы 90°)
+    if(name==='super')armB.y-=4;
+    toGuard(armB); }
+  else if(name==='bodyblow'){     // КРОСС В КОРПУС/ПЕЧЕНЬ: ниже, корпус подсаживается
+    torsoLean=(-6*an+18*ex)*dir; hipY=f.y-56+4*ex; headY=f.y-116+3*ex;
+    armB={x:f.x+(10-8*an+46*ex)*dir, y:f.y-82+8*ex};
+    armA={x:gAx,y:gAy}; legB={x:f.x+(12+14*ex)*dir,y:GROUND_Y};
+    legA={x:f.x-(14+8*ex)*dir,y:GROUND_Y-Math.max(0,ex-0.4)*10};
+    toGuard(armB); }
+  else if(name==='hook'){         // ХУК: локоть фиксирован ~90°, удар от вращения корпуса; передняя нога вкручивается
+    const sw=-0.55+1.55*ex;                                       // дуга маха (рад)
+    const sx=f.x+8*dir, sy=f.y-105, R=33;                         // кисть на постоянном радиусе → локоть держит ~90°
+    armB={x: sx + dir*(R*Math.sin(sw)+4), y: sy - R*0.34*Math.cos(sw) - 6};
+    armA={x:gAx,y:gAy};
+    torsoLean=(-8*an+24*ex)*dir;                                  // корпус вращается вокруг вертикали
+    legB={x:f.x+(10+10*ex)*dir,y:GROUND_Y}; legA={x:f.x-(14+4*ex)*dir,y:GROUND_Y};
+    toGuard(armB); }
+  else if(name==='launcher'){     // АППЕРКОТ: подсед на взводе → взрыв ногами вверх, бёдра толкают корпус
+    hipY=f.y-58+11*an-9*ex; headY=f.y-118+7*an-8*ex;
+    torsoLean=(-3+7*ex)*dir;
+    armB={x:f.x+(6+26*ex)*dir, y:f.y-(74+50*ex)+18*an};           // снизу (взвод) вверх в челюсть
+    armA={x:gAx,y:gAy};
+    legB={x:f.x+10*dir,y:GROUND_Y}; legA={x:f.x-12*dir,y:GROUND_Y};
+    toGuard(armB); }
   else if(name==='slash'){ armB={x:f.x+(20+58*ext)*dir,y:f.y-102-6*ext}; armA={x:f.x-(10+8*ext)*dir,y:f.y-92}; torsoLean=9*dir*ext; }
   else if(name==='thrust'){ armB={x:f.x+(26+74*ext)*dir,y:f.y-92}; armA={x:f.x+(8+18*ext)*dir,y:f.y-90}; torsoLean=7*dir*ext; }
-  else if(name==='kick'){ const a=ext;                              // фронт-кик в корпус: опорная нога стоит, бьющая поднята к груди
-    legB={x:f.x+(30+66*a)*dir,y:f.y-(60+26*a)}; legA={x:f.x-(4+2*a)*dir,y:GROUND_Y};
+  else if(name==='kick'){         // ФРОНТ-КИК в корпус: опорная нога стоит, бьющая к груди, корпус-противовес
+    legB={x:f.x+(30+66*ex)*dir,y:f.y-(60+26*ex)}; legA={x:f.x-(4+2*ex)*dir,y:GROUND_Y};
     hipY=f.y-60; headY=f.y-118;
-    armA={x:f.x-(10+10*a)*dir,y:f.y-98}; armB={x:f.x-(2+6*a)*dir,y:f.y-88}; torsoLean=-(4+9*a)*dir; }
-  else if(name==='headbutt'){ torsoLean=(12+24*ext)*dir; headY=f.y-110; armA={x:f.x-4*dir,y:f.y-98}; armB={x:f.x+8*dir,y:f.y-100}; legB={x:f.x+(10+18*ext),y:GROUND_Y}; }
-  else if(name==='hook'){ const a=ext, arc=Math.sin(a*Math.PI);   // дуга в голову: замах из-за плеча → крюк вокруг в висок
-    armB={x:f.x+(-22+78*a)*dir, y:f.y-116-6*arc}; armA={x:f.x+9*dir,y:f.y-106};
-    torsoLean=(-6+26*a)*dir; legB={x:f.x+(10+14*a),y:GROUND_Y}; legA={x:f.x-(14+6*a),y:GROUND_Y}; }
-  else if(name==='bodyblow'){ const a=ext; armB={x:f.x+(4+38*a)*dir,y:f.y-82+6*a}; armA={x:f.x+5*dir,y:f.y-100}; torsoLean=(6+16*a)*dir; legB={x:f.x+(10+12*a),y:GROUND_Y}; }   // дуга в корпус
-  else if(name==='launcher'){ armB={x:f.x+(8+22*ext)*dir,y:f.y-118-10*ext}; armA={x:f.x+6*dir,y:f.y-102}; torsoLean=-9*dir*ext; legB={x:f.x+(8+6*ext),y:GROUND_Y}; legA={x:f.x-14,y:GROUND_Y}; }
-  else if(name==='low'){ hipY=f.y-34; headY=f.y-78; legB={x:f.x+(18+50*ext)*dir,y:GROUND_Y-6}; legA={x:f.x-16,y:GROUND_Y};
-    armA={x:f.x-10*dir,y:f.y-50}; armB={x:f.x+8*dir,y:f.y-48}; }
+    armA={x:f.x-(10+10*ex)*dir,y:f.y-98}; armB={x:f.x-(2+6*ex)*dir,y:f.y-88}; torsoLean=-(4+9*ex)*dir; }
+  else if(name==='headbutt'){     // УДАР ГОЛОВОЙ: оттяжка корпуса назад → резкий клевок всем телом, шея жёсткая
+    torsoLean=(-10*an+27*ex)*dir; headY=f.y-112+4*an-2*ex; hipY=f.y-58;
+    armA={x:gAx,y:gAy}; armB={x:gBx,y:gBy};
+    legB={x:f.x+(10+16*ex)*dir,y:GROUND_Y}; }
+  else if(name==='low'){          // ЛОУ-КИК: таз раскрывается, голень летит как бита, руки у головы, корпус-противовес
+    hipY=f.y-56; headY=f.y-116; torsoLean=(5-20*ex)*dir;
+    legB={x:f.x+(8-12*an+72*ex)*dir, y:GROUND_Y-6-20*ex};          // голень-бита, чуть вверх по дуге
+    legA={x:f.x-(8+5*ex)*dir,y:GROUND_Y};                          // опорная нога разворачивается наружу
+    armA={x:gAx,y:gAy}; armB={x:gBx-4*ex*dir,y:gBy}; }
   else if(name==='air'||name==='over'){ legB={x:f.x+(16+42*ext)*dir,y:f.y-30}; legA={x:f.x-12,y:f.y-10};
     armA={x:f.x-18*dir,y:f.y-104}; armB={x:f.x+(10+30*ext)*dir,y:f.y-108}; }
   else if(name==='crawl'){ hipY=f.y-18; headY=f.y-30; torsoLean=20*dir;
@@ -1394,17 +1470,26 @@ function limbCol(f,key){ if(f.flash>0)return '#ffffff';
   if(isSword())return base;
   if(f.broken[key])return back?'#5a1a24':'#7a2230';
   const dmg=1-f.limbs[key]/100; return dmg<=0.02?base:blendAny(base,'#8a2f3a',dmg*0.65); }
-function ik(rx,ry,tx,ty,l1,l2,prefx,prefy){
-  let dx=tx-rx,dy=ty-ry,d=Math.hypot(dx,dy);
-  const ux=d>0.0001?dx/d:0, uy=d>0.0001?dy/d:1;
-  const dc=clamp(d,Math.abs(l1-l2)+2,l1+l2-1.5);      // зажимаем дистанцию ТОЛЬКО для расчёта локтя
+// Аналитический IK по закону косинусов с ограничениями сустава.
+// opt:{broken,t,maxStretch} — перелом роняет цепь по гравитации; maxStretch<1 держит микро-сгиб.
+function ik(rx,ry,tx,ty,l1,l2,prefx,prefy,opt){
+  if(opt&&opt.broken){                                  // ПЕРЕЛОМ: сустав болтается, конечность висит вниз
+    const t=opt.t||0, sway=Math.sin(t*0.18)*5, drop1=l1*0.86, drop2=l2*0.88;
+    const jx=rx+sway*0.5, jy=ry+drop1;
+    return {jx,jy, ex:jx+sway, ey:jy+drop2, broken:true};
+  }
+  const maxReach=(l1+l2)*((opt&&opt.maxStretch)||0.985);  // не выпрямляется в «палку» — всегда лёгкий сгиб
+  let dx=tx-rx,dy=ty-ry,d=Math.hypot(dx,dy)||1e-4;
+  const ux=dx/d, uy=dy/d;
+  const minD=Math.abs(l1-l2)+2;                           // нельзя сложить сустав глубже анатомии
+  const dc=clamp(d,minD,maxReach);                        // досягаемость ограничена → нет «резины»
   const a=(l1*l1-l2*l2+dc*dc)/(2*dc), h=Math.sqrt(Math.max(0,l1*l1-a*a));
   const mx=rx+ux*a, my=ry+uy*a; let px=-uy,py=ux;
-  if(px*prefx+py*prefy<0){ px=-px; py=-py; }
+  if(px*prefx+py*prefy<0){ px=-px; py=-py; }              // сгиб только в анатомическую сторону (нет обратного колена)
   let jx=mx+px*h, jy=my+py*h;
   if(!isFinite(jx)||!isFinite(jy)){ jx=rx+ux*l1; jy=ry+uy*l1; }
-  // конец конечности тянем к реальной цели, но не дальше вытянутой длины (без «резины»)
-  const md=l1+l2-1; let ex=tx,ey=ty; if(d>md){ ex=rx+ux*md; ey=ry+uy*md; }
+  // конец 2-й кости лежит на дуге, согласованной с локтём (на дистанции dc вдоль оси) → кисть/стопа не «отрывается»
+  const ex=rx+ux*dc, ey=ry+uy*dc;
   return {jx,jy,ex,ey};
 }
 // Анатомическая конечность: единый гладкий силуэт через 2 кости с мышечными брюшками,
@@ -1443,6 +1528,9 @@ function paintSkeleton(f,p){
     if(/^(heavy|super|launcher|headbutt|slash|thrust|hook|bodyblow)$/.test(nm)){
       const a=f.move.active||3; twTarget=(f.t>=f.move.start-2&&f.t<=f.move.start+a+3)?1:0.35; } }
   f._twist=(f._twist||0)+(twTarget-(f._twist||0))*0.4; const twist=f._twist;
+  // мышечное напряжение: дельта/бицепс вздуваются на активных кадрах удара
+  let tnTarget=0; if(f.state===ST.ATTACK&&f.move){ const a=f.move.active||3; tnTarget=(f.t>=f.move.start&&f.t<f.move.start+a)?1:0; }
+  f._tense=(f._tense||0)+(tnTarget-(f._tense||0))*0.5; const tense=f._tense;
   const headX=shoulderX+tl*0.3+twist*3*dir, headY=p.headY;
   ctx.save(); ctx.translate(f.x,f.y); ctx.scale(f.sx*(1-0.13*twist),f.sy); ctx.translate(-f.x,-f.y);
   ctx.lineJoin='round'; ctx.lineCap='round'; if(flash){ ctx.shadowColor='#fff'; ctx.shadowBlur=16; }
@@ -1461,7 +1549,7 @@ function paintSkeleton(f,p){
     ctx.beginPath(); ctx.arc(x1,y1,w1,0,7); ctx.fill(); ctx.beginPath(); ctx.arc(x2,y2,w2,0,7); ctx.fill();
   }
   function limb(rx,ry,tx,ty,l1,l2,prefx,prefy,w0,w1,w2,col,broken,b1,b2){
-    const k=ik(rx,ry,tx,ty,l1,l2,prefx,prefy);
+    const k=ik(rx,ry,tx,ty,l1,l2,prefx,prefy, broken?{broken:true,t:f.animClock}:null);
     muscleLimb({x:rx,y:ry},{x:k.jx,y:k.jy},{x:k.ex,y:k.ey},w0,w1,w2,b1||1.16,b2||1.12,col,OUT,broken);
     return k;
   }
@@ -1486,12 +1574,12 @@ function paintSkeleton(f,p){
   const bsX=shoulderX-(4+8*twist)*dir, bsY=shoulderY+1, fsX=shoulderX+(8+10*twist)*dir, fsY=shoulderY+1;
   const bhX=hipX-7, fhX=hipX+7;
   // плечо/дельта: каплевидная мышца, сглаженная в торс (не «шарик»)
-  function deltoid(x,y,col){ ctx.fillStyle=OUT; ctx.beginPath(); ctx.ellipse(x,y,8.2,7,0,0,7); ctx.fill();
-    ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(x,y,6.6,5.6,0,0,7); ctx.fill();
-    if(!flash){ ctx.fillStyle='rgba(255,255,255,.12)'; ctx.beginPath(); ctx.ellipse(x-1.5,y-1.5,3.4,2.6,0,0,7); ctx.fill(); } }
+  function deltoid(x,y,col,sc){ sc=sc||1; ctx.fillStyle=OUT; ctx.beginPath(); ctx.ellipse(x,y,8.2*sc,7*sc,0,0,7); ctx.fill();
+    ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(x,y,6.6*sc,5.6*sc,0,0,7); ctx.fill();
+    if(!flash){ ctx.fillStyle='rgba(255,255,255,.12)'; ctx.beginPath(); ctx.ellipse(x-1.5*sc,y-1.5*sc,3.4*sc,2.6*sc,0,0,7); ctx.fill(); } }
   // 1) задняя рука (за корпусом): бицепс→предплечье→кулак
   deltoid(bsX,bsY,shade(f.color,-26));
-  const kA=limb(bsX,bsY,p.armA.x,p.armA.y,26,23,-dir*0.5,1, 5.6,4.0,3.0, limbCol(f,'armA'), f.broken.armA, 1.22,1.08);
+  const kA=limb(bsX,bsY,p.armA.x,p.armA.y,26,23,dir*0.35,1, 5.6,4.0,3.0, limbCol(f,'armA'), f.broken.armA, 1.22,1.08);
   hand(p.armA.x,p.armA.y,kA.jx,kA.jy, limbCol(f,'armA'));
   // 2) задняя нога: бедро→икра→стопа
   const kLA=limb(bhX,hipY,p.legA.x,p.legA.y,37,34,dir,0.32, 8.6,5.4,3.8, limbCol(f,'legA'), f.broken.legA, 1.20,1.30);
@@ -1576,8 +1664,9 @@ function paintSkeleton(f,p){
     ctx.strokeStyle=isSword()?'#dbe8ff':lite; ctx.lineWidth=isSword()?7:11;
     ctx.beginPath(); ctx.moveTo(f._ph.x,f._ph.y); ctx.lineTo(p.armB.x,p.armB.y); ctx.stroke(); ctx.restore(); }
   f._ph={x:p.armB.x,y:p.armB.y};
-  deltoid(fsX,fsY,f.flash>0?'#fff':shade(f.color,18));
-  const kB=limb(fsX,fsY,p.armB.x,p.armB.y,26,23,-dir*0.5,1, 6.0,4.2,3.2, limbCol(f,'armB'), f.broken.armB, 1.24,1.1);
+  deltoid(fsX,fsY,f.flash>0?'#fff':shade(f.color,18), 1+0.30*tense);
+  const tw=1+0.24*tense;   // вздутие бицепса/предплечья на ударе
+  const kB=limb(fsX,fsY,p.armB.x,p.armB.y,26,23,dir*0.35,1, 6.0*tw,4.2*tw,3.2, limbCol(f,'armB'), f.broken.armB, 1.24+0.12*tense,1.1);
   hand(p.armB.x,p.armB.y,kB.jx,kB.jy, limbCol(f,'armB'));
   if(isSword())drawSword(f,p,fsX,fsY);
   if(!flash){ ctx.strokeStyle='rgba(255,232,196,.22)'; ctx.lineWidth=2;   // контровой свет сверху
@@ -1663,10 +1752,15 @@ function drawDownBody(f){
   }
   const cos=Math.cos(rot), sin=Math.sin(rot);
   const W=(lx,ly)=>({x:pvx+lx*cos-ly*sin, y:pvy+lx*sin+ly*cos});
+  // конечности ЗАПАЗДЫВАЮТ за корпусом (инерция) → ощущение тряпичной куклы, без дорогого солвера
+  const rotL=rot-0.20*(rot>=0?1:-1), cl=Math.cos(rotL), sl=Math.sin(rotL);
+  const WL=(lx,ly)=>({x:pvx+lx*cl-ly*sl, y:pvy+lx*sl+ly*cl});
   const hip=W(0,0), bh=W(-7,0), fh=W(7,0), sh=W(0,-46);
   const bs=W(-6,-44), fs=W(7,-44), headC=W(0,-62), neck=W(0,-50);
-  const footA=W(-4-4*s, 50-20*s), footB=W(8+16*s, 52-6*s);          // задняя нога подгибается, передняя вытянута
-  const handA=W(-10-14*s,-48-4*s), handB=W(13+12*s,-40+52*s);       // задняя рука над головой, передняя сползает вбок
+  let footA=WL(-4-4*s, 50-20*s), footB=WL(8+16*s, 52-6*s);          // задняя нога подгибается, передняя вытянута
+  let handA=WL(-10-14*s,-48-4*s), handB=WL(13+12*s,-40+52*s);       // задняя рука над головой, передняя сползает вбок
+  // РЕАКЦИЯ ФЕХТОВАЛЬЩИКА: при нокауте в голову руки застывают вытянутыми, пока тело падает
+  if(!f.onGround && f.lastRegion==='head'){ handA=WL(-30,-46); handB=WL(30,-40); }
   ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
   let e;
   e=ik(bs.x,bs.y,handA.x,handA.y,26,23,-dirSign,-1);                // задняя рука
