@@ -85,6 +85,14 @@
     backdrop-filter:blur(2px);touch-action:none;-webkit-tap-highlight-color:transparent}
   .tbtn.on{background:rgba(255,210,63,.45);border-color:var(--acc);transform:scale(.94)}
   .tbtn.dir{width:60px;height:60px}.tbtn.act{width:66px;height:66px}.tbtn.thr{width:58px;height:58px;font-size:12px}
+  /* Виртуальный стик движения (левая зона) */
+  #stickZone{position:absolute;left:0;bottom:0;width:46%;height:82%;touch-action:none;z-index:31}
+  #stickBase{position:absolute;width:132px;height:132px;border-radius:50%;display:none;z-index:32;pointer-events:none;
+    border:2px solid rgba(246,236,255,.22);background:radial-gradient(circle,rgba(20,8,38,.18),rgba(20,8,38,.42));
+    transform:translate(-50%,-50%);backdrop-filter:blur(2px)}
+  #stickBase.on{display:block}
+  #stickKnob{position:absolute;left:50%;top:50%;width:62px;height:62px;border-radius:50%;
+    background:rgba(255,210,63,.42);border:2px solid var(--acc);transform:translate(-50%,-50%);box-shadow:0 0 14px rgba(255,210,63,.4)}
   /* Низкие экраны (телефон в ландшафте): ужимаем меню, чтобы всё влезало без прокрутки */
   @media (max-height:440px){
     .title{font-size:clamp(22px,5vw,40px)}
@@ -211,10 +219,8 @@
 </div>
 
 <div id="touch">
-  <button class="tbtn dir" data-code="KeyW" style="left:80px;bottom:150px">▲</button>
-  <button class="tbtn dir" data-code="KeyS" style="left:80px;bottom:18px">▼</button>
-  <button class="tbtn dir" data-code="KeyA" style="left:14px;bottom:84px">◀</button>
-  <button class="tbtn dir" data-code="KeyD" style="left:146px;bottom:84px">▶</button>
+  <div id="stickZone"></div>
+  <div id="stickBase"><div id="stickKnob"></div></div>
   <button class="tbtn act" data-code="KeyF" style="right:148px;bottom:84px">У1</button>
   <button class="tbtn act" data-code="KeyG" style="right:78px;bottom:150px">У2</button>
   <button class="tbtn act" data-code="KeyH" style="right:10px;bottom:120px">СП</button>
@@ -762,7 +768,7 @@ class Projectile{
    ========================================================================= */
 const FX={
   parts:[],texts:[],stains:[],rings:[],gibs:[],shakeMag:0,shakeT:0,redFlash:0,
-  gib(x,y,vx,vy,kind,color){ if(REPLAY)return; this.gibs.push({x,y,vx,vy,rot:Math.random()*7,vr:(Math.random()-.5)*0.6,kind,color,life:260,settled:false}); },
+  gib(x,y,vx,vy,kind,color,r){ if(REPLAY)return; this.gibs.push({x,y,vx,vy,rot:Math.random()*7,vr:(Math.random()-.5)*0.6,kind,color,r:r||0,life:260,settled:false}); },
   spark(x,y,color,n,block){ if(REPLAY)return; for(let i=0;i<n;i++){ const a=Math.random()*7,s=(block?2:4)+Math.random()*6;
     this.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1,life:14+Math.random()*10,max:24,color,r:block?2:3}); } },
   ring(x,y,color,big){ if(REPLAY)return; this.rings.push({x,y,r:big?10:6,gr:big?6:4,life:14,max:14,color}); },
@@ -818,10 +824,15 @@ const FX={
     g.beginPath(); g.ellipse(s.x,s.y,s.r,s.r*0.4,0,0,7); g.fill(); } g.restore(); },
   drawGibs(g){ for(const gb of this.gibs){ g.save(); g.translate(gb.x,gb.y); g.rotate(gb.rot);
     if(gb.kind==='head'){ g.fillStyle='#0a0a0c'; g.beginPath(); g.ellipse(0,0,12,13,0,0,7); g.fill();
-      g.fillStyle=gb.color; g.beginPath(); g.ellipse(0,0,10,11,0,0,7); g.fill(); }
+      g.fillStyle=gb.color; g.beginPath(); g.ellipse(0,0,10,11,0,0,7); g.fill();
+      g.fillStyle='#8a120c'; g.beginPath(); g.arc(0,0,4.5,0,7); g.fill(); }
+    else if(gb.kind==='chunk'){ const r=gb.r||6;                   // мелкий мясной ошмёток (не «конечность»)
+      g.fillStyle='#0a0a0c'; g.beginPath(); g.ellipse(0,0,r+1.4,(r+1.4)*0.78,0,0,7); g.fill();
+      g.fillStyle=gb.color; g.beginPath(); g.ellipse(0,0,r,r*0.78,0,0,7); g.fill();
+      g.fillStyle='#8a120c'; g.beginPath(); g.arc(r*0.3,0,r*0.4,0,7); g.fill(); }
     else { g.strokeStyle='#0a0a0c'; g.lineWidth=14; g.lineCap='round'; g.beginPath(); g.moveTo(-15,0); g.lineTo(15,0); g.stroke();
-      g.strokeStyle=gb.color; g.lineWidth=10; g.beginPath(); g.moveTo(-15,0); g.lineTo(15,0); g.stroke(); }
-    g.fillStyle='#8a120c'; g.beginPath(); g.arc(gb.kind==='head'?0:-15,0,4.5,0,7); g.fill();   // обрубок
+      g.strokeStyle=gb.color; g.lineWidth=10; g.beginPath(); g.moveTo(-15,0); g.lineTo(15,0); g.stroke();
+      g.fillStyle='#8a120c'; g.beginPath(); g.arc(-15,0,4.5,0,7); g.fill(); }   // обрубок конечности
     g.restore(); } },
   draw(g){ for(const r of this.rings){ g.globalAlpha=Math.max(0,r.life/r.max)*0.8; g.strokeStyle=r.color;
       g.lineWidth=3; g.beginPath(); g.arc(r.x,r.y,r.r,0,7); g.stroke(); } g.globalAlpha=1;
@@ -1156,12 +1167,12 @@ function swordKill(def,att,kind){
   FX.blood(def.x,sy,att.facing,82,3.3); FX.blood(def.x,sy,-att.facing,40,2.2);
   if(def.sever){ const dvx=att.facing*(4+Math.random()*4), dvy=-(7+Math.random()*4);
     FX.gib(def.x+att.facing*8,sy,dvx,dvy,kind==='head'?'head':'limb',blendAny(def.color,'#5a1118',0.4)); }
-  // РАЗЛЁТ НА КУСКИ ПОКРУПНЕЕ: веер мясо-костных ошмётков от клинка
-  for(let i=0;i<6;i++){ const ang=(Math.random()-0.5)*2.6;
-    FX.gib(def.x+(Math.random()-.5)*18, sy+(Math.random()-.5)*34,
+  // РАЗЛЁТ НА КУСКИ: веер мясных ошмётков (chunk), НЕ цельные конечности
+  for(let i=0;i<7;i++){ const ang=(Math.random()-0.5)*2.6;
+    FX.gib(def.x+(Math.random()-.5)*18, sy+(Math.random()-.5)*30,
       Math.cos(ang)*(3+Math.random()*7)+att.facing*2.5, -(5+Math.random()*8),
-      'limb', blendAny(def.color,'#5a1118',0.35+Math.random()*0.25)); }
-  for(let i=0;i<9;i++)FX.parts.push({x:def.x,y:sy,vx:(Math.random()-.5)*12+att.facing*2,vy:-(4+Math.random()*8),
+      'chunk', blendAny(def.color,'#5a1118',0.4+Math.random()*0.25), 4+Math.random()*5); }
+  for(let i=0;i<10;i++)FX.parts.push({x:def.x,y:sy,vx:(Math.random()-.5)*12+att.facing*2,vy:-(4+Math.random()*8),
     life:50,max:74,color:Math.random()<.4?'#5a1118':'#8a120c',r:3+Math.random()*3.2,blood:true});
   for(let i=0;i<6;i++)FX.stain(def.x+(Math.random()-.5)*90,6+Math.random()*8); FX.flash(22);
   popText(kind==='head'?'ОБЕЗГЛАВЛЕН':kind==='arm'?'РУКА ОТСЕЧЕНА':kind==='leg'?'НОГА ОТСЕЧЕНА':'РАЗРЕЗ!',def.x,def.y-150,'#ff3355');
@@ -2172,6 +2183,29 @@ document.querySelectorAll('#touch .tbtn').forEach(btn=>{
   btn.addEventListener('pointerdown',down); btn.addEventListener('pointerup',up);
   btn.addEventListener('pointercancel',up); btn.addEventListener('pointerleave',up); btn.addEventListener('lostpointercapture',up);
 });
+/* ВИРТУАЛЬНЫЙ СТИК: плавающий аналоговый джойстик слева → цифровые KeyA/D/W/S с мёртвой зоной */
+(function(){
+  const zone=document.getElementById('stickZone'), base=document.getElementById('stickBase'), knob=document.getElementById('stickKnob');
+  if(!zone)return; const DIRS=['KeyA','KeyD','KeyW','KeyS']; let active=new Set(), pid=null, cx=0, cy=0;
+  const R=56, DEAD=15;
+  function apply(want){ for(const c of DIRS){ const w=want.has(c);
+    if(w&&!active.has(c)){ if(!keys.has(c))justPressed.add(c); keys.add(c); }
+    else if(!w&&active.has(c)){ keys.delete(c); } } active=want; }
+  function clearAll(){ for(const c of DIRS)keys.delete(c); active=new Set(); }
+  function dirs(dx,dy){ const w=new Set();
+    if(dx<-DEAD)w.add('KeyA'); else if(dx>DEAD)w.add('KeyD');
+    if(dy<-DEAD)w.add('KeyW'); else if(dy>DEAD)w.add('KeyS'); return w; }
+  zone.addEventListener('pointerdown',e=>{ e.preventDefault(); SFX.unlock(); pid=e.pointerId; cx=e.clientX; cy=e.clientY;
+    base.style.left=cx+'px'; base.style.top=cy+'px'; knob.style.transform='translate(-50%,-50%)'; base.classList.add('on');
+    try{zone.setPointerCapture(e.pointerId);}catch(_){} });
+  zone.addEventListener('pointermove',e=>{ if(e.pointerId!==pid)return; e.preventDefault();
+    const dx=e.clientX-cx, dy=e.clientY-cy, d=Math.hypot(dx,dy)||1, cl=Math.min(d,R);
+    const kx=dx/d*cl, ky=dy/d*cl;
+    knob.style.transform=`translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+    apply(dirs(dx,dy)); });
+  const end=e=>{ if(pid!==null&&e.pointerId!==pid)return; pid=null; base.classList.remove('on'); clearAll(); };
+  zone.addEventListener('pointerup',end); zone.addEventListener('pointercancel',end); zone.addEventListener('lostpointercapture',end);
+})();
 
 /* =========================================================================
    УТИЛИТЫ
