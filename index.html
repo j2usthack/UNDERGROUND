@@ -39,17 +39,17 @@
 
   .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;
     gap:14px;text-align:center;background:radial-gradient(120% 90% at 50% 10%,rgba(60,40,22,.5),rgba(8,8,10,.95));
-    backdrop-filter:blur(2px);border-radius:6px;z-index:10;padding:18px 16px;
+    backdrop-filter:blur(2px);border-radius:6px;z-index:10;padding:16px;
     overflow-y:auto;overflow-x:hidden;touch-action:pan-y;-webkit-overflow-scrolling:touch}
   .hidden{display:none!important}
-  .title{font-weight:900;line-height:.86;letter-spacing:-2px;font-size:clamp(40px,9vw,100px);
+  .title{font-weight:900;line-height:.86;letter-spacing:-2px;font-size:clamp(36px,6.5vw,74px);
     background:linear-gradient(180deg,#fff,var(--acc) 60%,var(--p1));-webkit-background-clip:text;background-clip:text;
     color:transparent;text-shadow:0 0 38px rgba(255,210,63,.25);transform:skewX(-6deg)}
   .title small{display:block;-webkit-text-fill-color:var(--p2);color:var(--p2);font-size:.2em;letter-spacing:8px;
     font-weight:700;transform:skewX(6deg);margin-top:6px}
-  .menu{display:flex;flex-direction:column;gap:11px;width:min(440px,86vw)}
+  .menu{display:flex;flex-direction:column;gap:9px;width:min(440px,86vw)}
   button.btn{appearance:none;cursor:pointer;font-family:inherit;font-weight:800;color:var(--ink);
-    background:rgba(20,8,38,.6);border:2px solid var(--line);padding:14px 18px;border-radius:10px;
+    background:rgba(20,8,38,.6);border:2px solid var(--line);padding:12px 18px;border-radius:10px;
     font-size:clamp(14px,2.4vw,18px);letter-spacing:.5px;transition:transform .08s,border-color .15s,background .15s;
     text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;gap:10px}
   button.btn:hover{transform:translateY(-2px);border-color:var(--acc);background:rgba(40,14,68,.85)}
@@ -85,12 +85,30 @@
     backdrop-filter:blur(2px);touch-action:none;-webkit-tap-highlight-color:transparent}
   .tbtn.on{background:rgba(255,210,63,.45);border-color:var(--acc);transform:scale(.94)}
   .tbtn.dir{width:60px;height:60px}.tbtn.act{width:66px;height:66px}.tbtn.thr{width:58px;height:58px;font-size:12px}
+  /* Низкие экраны (телефон в ландшафте): ужимаем меню, чтобы всё влезало без прокрутки */
+  @media (max-height:440px){
+    .title{font-size:clamp(22px,5vw,40px)}
+    .title small{font-size:.24em;letter-spacing:5px;margin-top:2px}
+    .overlay{gap:5px;padding:8px 12px}
+    .menu{gap:5px;width:min(440px,94vw)}
+    button.btn{padding:6px 14px;font-size:12.5px;border-width:1px;border-radius:8px}
+    .seg button{padding:5px 6px;font-size:11.5px}
+    .lbl{font-size:9px;letter-spacing:2px}
+    #menuHint,.credit{display:none}                 /* подсказку прячем — есть отдельный экран «Управление» */
+    .controls{grid-template-columns:1fr;gap:6px;font-size:12px}
+    .controls h3{margin-bottom:2px}
+    #howto .hint{font-size:10.5px;line-height:1.5}
+    #howto .title{font-size:clamp(20px,4.5vw,34px)}
+  }
+  /* Узкие экраны: одна колонка управления */
+  @media (max-width:560px){ .controls{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
 <button id="mute" data-act="mute" title="Звук (M)">🔊</button>
 <div id="stage"><div id="wrap">
   <canvas id="game" width="960" height="540"></canvas>
+</div>
 
   <div id="mainMenu" class="overlay">
     <div class="title">КЛЕТКА<small>бои без правил</small></div>
@@ -113,11 +131,8 @@
       </div>
       <button class="btn" data-act="howto">Управление и приёмы <span class="k">C</span></button>
     </div>
-    <div class="hint" id="menuHint">Подпольная клетка, бои без правил. Ломай ноги — соперник ковыляет, перебей обе — рухнет и поползёт.
-      Две сломанные руки — нет блока. Крит и добивание решают. Мечи: один удар — смерть, подсечка калечит ногу.
-      <b>Арены смертельны:</b> ⚡стены под током, 🔥струи пламени из пола, 🗡шипы в стенах — загоняй врага в опасность.<br>
-      <b style="color:var(--acc)">НОВОЕ:</b> Блок расходует шкалу Выносливости. Пробитие блока = гарантированный крит!
-    </div>
+    <div class="hint" id="menuHint">Подпольные бои без правил: ломай конечности, пробивай блок, добивай <b>фаталити</b>.
+      <b>Арены смертельны</b> — ⚡ток, 🔥пламя, 🗡шипы. Подробности приёмов — в «Управление».</div>
     <div class="credit">Одиночный HTML5 файл · Готово к интеграции</div>
   </div>
 
@@ -193,7 +208,7 @@
       <button class="btn" data-act="menu" style="justify-content:center">В меню</button>
     </div>
   </div>
-</div></div>
+</div>
 
 <div id="touch">
   <button class="tbtn dir" data-code="KeyW" style="left:80px;bottom:150px">▲</button>
@@ -819,7 +834,7 @@ const FX={
   offset(){ if(this.shakeT<=0)return {x:0,y:0}; const m=this.shakeMag*(this.shakeT/12); return {x:(Math.random()-.5)*m,y:(Math.random()-.5)*m}; }
 };
 let hitstopT=0,koFlash=0;
-const cam={x:WORLD_W/2,z:1,kick:0};
+const cam={x:WORLD_W/2,y:0,z:1,kick:0};   // y — вертикальная панорама (экранный сдвиг) для доезда к ране
 function hitstop(f){ hitstopT=Math.max(hitstopT,f); }
 function camKick(v){ if(REPLAY)return; cam.kick=Math.max(cam.kick,v); }
 function shake(m){ if(REPLAY)return; FX.shakeMag=m; FX.shakeT=12; }
@@ -835,18 +850,30 @@ function updateCam(){
   const mid=(p1.x+p2.x)/2, vhalf=(W/cam.z)/2;
   let tx=mid; if(WORLD_W<=2*vhalf)tx=WORLD_W/2; else tx=clamp(mid,vhalf,WORLD_W-vhalf);
   cam.x+=(tx-cam.x)*0.12;
+  cam.y+=(0-cam.y)*0.2;                                  // вертикаль возвращается к нулю в бою
   cam.kick*=0.82; if(cam.kick<0.002)cam.kick=0;
 }
-// Конец раунда: кинематографичный ОТЪЕЗД камеры + фокус на жертве фаталити (а не наезд на победителя)
+// Конец раунда — кинематографичная камера в стиле Mortal Kombat:
+// ФАЗА 1 отъезд (показать всю расправу) → ФАЗА 2 пауза → ФАЗА 3 медленный доезд вплотную к ране.
 function roundEndCam(){
   if(!p1||!p2)return;
   const loser = match.koWinner===1?p2:(match.koWinner===2?p1:null);
-  const focus = loser ? loser.x*0.76 + (loser===p1?p2.x:p1.x)*0.24 : (p1.x+p2.x)/2;  // кадрируем жертву фаталити
-  const targetZ=0.86;                                  // отъезд от тесного KO-кадра, но расправа крупно и в центре
-  cam.z+=(targetZ-cam.z)*0.06;                          // плавный отъезд
-  const vhalf=(W/cam.z)/2; let tx=focus;
-  if(WORLD_W<=2*vhalf)tx=WORLD_W/2; else tx=clamp(focus,vhalf,WORLD_W-vhalf);
-  cam.x+=(tx-cam.x)*0.06;
+  const el = 120-match.phaseT;                           // прошло кадров с конца раунда
+  if(!loser){ cam.z+=(0.84-cam.z)*0.06; cam.x+=(((p1.x+p2.x)/2)-cam.x)*0.06; cam.y+=(0-cam.y)*0.12; cam.kick*=0.82; return; }
+  const woundY=GROUND_Y-26, woundX=loser.x;             // рана/обрубок лежащего трупа
+  let tz,tx, keyY;
+  if(el<48){                                            // ФАЗА 1+2: широкий план расправы и пауза
+    tz=0.82; tx=loser.x*0.72+(loser===p1?p2.x:p1.x)*0.28; keyY=false;
+  } else {                                              // ФАЗА 3: медленный доезд к ране (MK kamera)
+    tz=1.95; tx=woundX; keyY=true;
+  }
+  const k = el<48?0.07:0.05;                            // доезд медленнее отъезда
+  cam.z+=(tz-cam.z)*k;
+  const vhalf=(W/cam.z)/2; tx = (WORLD_W<=2*vhalf)?WORLD_W/2:clamp(tx,vhalf,WORLD_W-vhalf);
+  cam.x+=(tx-cam.x)*k;
+  // вертикаль: в доезде центрируем рану в кадре, иначе держим 0
+  const wantY = keyY ? (H*0.46 - (300 + cam.z*(woundY-300))) : 0;
+  cam.y+=(wantY-cam.y)*k;
   cam.kick*=0.82; if(cam.kick<0.002)cam.kick=0;
 }
 
@@ -918,7 +945,7 @@ function newMatch(){
   match={style:gameStyle,arena:ARENAS[arenaIdx]||ARENAS[0],need:sw?3:2,round:1,w1:0,w2:0,time:rt,timeF:rt*60,phase:'intro',phaseT:90,
     banner:'РАУНД 1',sub:'',slowmo:0,over:false,koWinner:0,zoom:0,hazT:0};
   match.sub='«'+match.arena.name+'»';
-  cam.x=WORLD_W/2; cam.z=1; cam.kick=0; FX.stains.length=0; FX.gibs.length=0; SFX.setMusic(match.arena.riff);
+  cam.x=WORLD_W/2; cam.y=0; cam.z=1; cam.kick=0; FX.stains.length=0; FX.gibs.length=0; SFX.setMusic(match.arena.riff);
 }
 function resetRound(){
   p1.reset(Math.round(WORLD_W*0.36)); p2.reset(Math.round(WORLD_W*0.64)); p1.wins=match.w1; p2.wins=match.w2; projectiles=[];
@@ -1129,8 +1156,13 @@ function swordKill(def,att,kind){
   FX.blood(def.x,sy,att.facing,82,3.3); FX.blood(def.x,sy,-att.facing,40,2.2);
   if(def.sever){ const dvx=att.facing*(4+Math.random()*4), dvy=-(7+Math.random()*4);
     FX.gib(def.x+att.facing*8,sy,dvx,dvy,kind==='head'?'head':'limb',blendAny(def.color,'#5a1118',0.4)); }
-  for(let i=0;i<7;i++)FX.parts.push({x:def.x,y:sy,vx:(Math.random()-.5)*10+att.facing*2,vy:-(4+Math.random()*7),
-    life:48,max:70,color:Math.random()<.4?'#5a1118':'#8a120c',r:2.8+Math.random()*2.6,blood:true});
+  // РАЗЛЁТ НА КУСКИ ПОКРУПНЕЕ: веер мясо-костных ошмётков от клинка
+  for(let i=0;i<6;i++){ const ang=(Math.random()-0.5)*2.6;
+    FX.gib(def.x+(Math.random()-.5)*18, sy+(Math.random()-.5)*34,
+      Math.cos(ang)*(3+Math.random()*7)+att.facing*2.5, -(5+Math.random()*8),
+      'limb', blendAny(def.color,'#5a1118',0.35+Math.random()*0.25)); }
+  for(let i=0;i<9;i++)FX.parts.push({x:def.x,y:sy,vx:(Math.random()-.5)*12+att.facing*2,vy:-(4+Math.random()*8),
+    life:50,max:74,color:Math.random()<.4?'#5a1118':'#8a120c',r:3+Math.random()*3.2,blood:true});
   for(let i=0;i<6;i++)FX.stain(def.x+(Math.random()-.5)*90,6+Math.random()*8); FX.flash(22);
   popText(kind==='head'?'ОБЕЗГЛАВЛЕН':kind==='arm'?'РУКА ОТСЕЧЕНА':kind==='leg'?'НОГА ОТСЕЧЕНА':'РАЗРЕЗ!',def.x,def.y-150,'#ff3355');
   SFX.slice(); shake(16); hitstop(14); camKick(0.15);
@@ -1178,7 +1210,7 @@ function render(){
   const fy=300, a=curArena(), T=(p1?p1.animClock:0);
   ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H);
   drawSky(a);
-  const layer=(p)=>{ ctx.setTransform(1,0,0,1,0,0); ctx.translate(off.x,off.y); ctx.translate(W/2,fy); ctx.scale(z,z);
+  const layer=(p)=>{ ctx.setTransform(1,0,0,1,0,0); ctx.translate(off.x,off.y+cam.y); ctx.translate(W/2,fy); ctx.scale(z,z);
     const ecx=WORLD_W/2+(cam.x-WORLD_W/2)*p; ctx.translate(-ecx,-fy); };
   layer(0.28); drawBackFar(T,a);
   layer(0.58); drawBackMid(T,a);
