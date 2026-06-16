@@ -10,7 +10,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;background:#05020c;overflow:hidden;color:var(--ink);
     font-family:"Segoe UI",system-ui,-apple-system,sans-serif;-webkit-user-select:none;user-select:none;touch-action:none}
-  #stage{position:fixed;inset:0;display:grid;place-items:center}
+  #stage{position:fixed;inset:0;overflow:hidden;background:#05020c}
   
   /* Эффект старого ЭЛТ-монитора и грязи */
   #stage::after {
@@ -26,7 +26,7 @@
     opacity: 0.4;
   }
 
-  #wrap{position:relative;transform-origin:center center}
+  #wrap{position:absolute;left:50%;top:50%;transform-origin:center center;will-change:transform}
   
   /* Легкое свечение (Bloom) для всего канваса */
   canvas{
@@ -37,9 +37,10 @@
     filter: drop-shadow(0 0 10px rgba(255, 210, 63, 0.12)) contrast(1.15) saturate(1.2);
   }
 
-  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:16px;text-align:center;background:radial-gradient(120% 90% at 50% 10%,rgba(60,40,22,.5),rgba(8,8,10,.95));
-    backdrop-filter:blur(2px);border-radius:6px;z-index:10;padding:16px}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;
+    gap:14px;text-align:center;background:radial-gradient(120% 90% at 50% 10%,rgba(60,40,22,.5),rgba(8,8,10,.95));
+    backdrop-filter:blur(2px);border-radius:6px;z-index:10;padding:18px 16px;
+    overflow-y:auto;overflow-x:hidden;touch-action:pan-y;-webkit-overflow-scrolling:touch}
   .hidden{display:none!important}
   .title{font-weight:900;line-height:.86;letter-spacing:-2px;font-size:clamp(40px,9vw,100px);
     background:linear-gradient(180deg,#fff,var(--acc) 60%,var(--p1));-webkit-background-clip:text;background-clip:text;
@@ -1125,12 +1126,14 @@ function swordKill(def,att,kind){
   def.sever=(kind==='impale')?null:kind;
   const sy=kind==='head'?def.y-118:kind==='leg'?def.y-30:def.y-86;
   for(let i=0;i<26;i++)FX.spark(def.x,sy,att.color,3,false);
-  FX.blood(def.x,sy,att.facing,64,3.0); FX.blood(def.x,sy,-att.facing,30,2.0);
+  FX.blood(def.x,sy,att.facing,82,3.3); FX.blood(def.x,sy,-att.facing,40,2.2);
   if(def.sever){ const dvx=att.facing*(4+Math.random()*4), dvy=-(7+Math.random()*4);
     FX.gib(def.x+att.facing*8,sy,dvx,dvy,kind==='head'?'head':'limb',blendAny(def.color,'#5a1118',0.4)); }
+  for(let i=0;i<7;i++)FX.parts.push({x:def.x,y:sy,vx:(Math.random()-.5)*10+att.facing*2,vy:-(4+Math.random()*7),
+    life:48,max:70,color:Math.random()<.4?'#5a1118':'#8a120c',r:2.8+Math.random()*2.6,blood:true});
   for(let i=0;i<6;i++)FX.stain(def.x+(Math.random()-.5)*90,6+Math.random()*8); FX.flash(22);
   popText(kind==='head'?'ОБЕЗГЛАВЛЕН':kind==='arm'?'РУКА ОТСЕЧЕНА':kind==='leg'?'НОГА ОТСЕЧЕНА':'РАЗРЕЗ!',def.x,def.y-150,'#ff3355');
-  SFX.slice(); shake(14); hitstop(12);
+  SFX.slice(); shake(16); hitstop(14); camKick(0.15);
   endRoundWin(def===p1?2:1, kind==='head'?'ОБЕЗГЛАВЛЕН':'УБИТ','');
 }
 function endRoundWin(winner,banner,sub){
@@ -1142,9 +1145,11 @@ function doFatality(f,region){
   const kind=region==='head'?'head':region==='leg'?'leg':region==='torso'?'torso':'arm';
   f.sever=(kind==='torso')?null:kind;
   const sy=kind==='head'?f.y-118:kind==='leg'?f.y-30:f.y-86;
-  FX.blood(f.x,sy,f.facing,72,3.2); FX.blood(f.x,sy,-f.facing,42,2.4); FX.flash(24); shake(16); hitstop(16);
+  FX.blood(f.x,sy,f.facing,98,3.5); FX.blood(f.x,sy,-f.facing,56,2.6); FX.flash(26); shake(20); hitstop(20); camKick(0.16);
   if(f.sever){ FX.gib(f.x,sy,(Math.random()-.5)*7,-(7+Math.random()*4),kind==='head'?'head':'limb',blendAny(f.color,'#5a1118',0.4)); }
-  for(let i=0;i<8;i++)FX.stain(f.x+(Math.random()-.5)*100,7+Math.random()*10);
+  for(let i=0;i<9;i++)FX.parts.push({x:f.x,y:sy,vx:(Math.random()-.5)*11-f.facing*2,vy:-(4+Math.random()*8),  // куски мяса
+    life:50,max:72,color:Math.random()<.4?'#5a1118':'#8a120c',r:3+Math.random()*3,blood:true});
+  for(let i=0;i<10;i++)FX.stain(f.x+(Math.random()-.5)*110,8+Math.random()*11);
   popText(kind==='head'?'ОБЕЗГЛАВЛЕН':kind==='arm'?'РУКА ОТОРВАНА':kind==='leg'?'НОГА ОТОРВАНА':'РАЗОРВАН',f.x,f.y-152,'#ff2a44');
   SFX.slice(); SFX.crack();
 }
@@ -1447,7 +1452,7 @@ function lerpPose(r,t,k){ for(const key of['armA','armB','legA','legB']){ r[key]
   r.hpy+=(t.hpy-r.hpy)*k; r.hdy+=(t.hdy-r.hdy)*k; r.lean+=(t.lean-r.lean)*k; }
 
 function drawFighter(f){
-  if(f.state===ST.KNOCKDOWN){ if(f.dead||f.sever)drawKnockdown(f); else drawDownBody(f); return; }
+  if(f.state===ST.KNOCKDOWN){ drawDownBody(f); return; }   // и живой нокдаун, и труп (с расчленёнкой) — артикулированно
   if(f.state===ST.ROLL){ drawRoll(f); return; }
   const target=poseLocal(f); if(!f.rig)f.rig=clonePose(target);
   let k=0.5;
@@ -1750,6 +1755,11 @@ function drawDownBody(f){
     f._spin=null; const k=Math.max(0,f.t)/getupT, e=k*k*(3-2*k);
     rot=liefull*dirSign*e; pvy=ground-16-(1-e)*42; s=0.12+0.88*e;
   }
+  const dead=f.dead, sev=f.sever, flash=f.flash>0;
+  // труп тускнеет/синеет; цвета мяса для обрубков
+  const bcol = flash?'#fff' : (dead?blendAny(base,'#48121a',0.5):base);
+  const bcolBack = flash?'#fff' : (dead?blendAny(shade(base,-30),'#380d12',0.5):shade(base,-30));
+  const bcolBackLeg = flash?'#fff' : (dead?blendAny(shade(base,-34),'#380d12',0.5):shade(base,-34));
   const cos=Math.cos(rot), sin=Math.sin(rot);
   const W=(lx,ly)=>({x:pvx+lx*cos-ly*sin, y:pvy+lx*sin+ly*cos});
   // конечности ЗАПАЗДЫВАЮТ за корпусом (инерция) → ощущение тряпичной куклы, без дорогого солвера
@@ -1759,41 +1769,44 @@ function drawDownBody(f){
   const bs=W(-6,-44), fs=W(7,-44), headC=W(0,-62), neck=W(0,-50);
   let footA=WL(-4-4*s, 50-20*s), footB=WL(8+16*s, 52-6*s);          // задняя нога подгибается, передняя вытянута
   let handA=WL(-10-14*s,-48-4*s), handB=WL(13+12*s,-40+52*s);       // задняя рука над головой, передняя сползает вбок
-  // РЕАКЦИЯ ФЕХТОВАЛЬЩИКА: при нокауте в голову руки застывают вытянутыми, пока тело падает
+  // РЕАКЦИЯ ФЕХТОВАЛЬЩИКА: при нокауте/добивании в голову руки застывают вытянутыми, пока тело падает
   if(!f.onGround && f.lastRegion==='head'){ handA=WL(-30,-46); handB=WL(30,-40); }
+  // кровавый обрубок (мясо → кость → артерия) на месте оторванной части
+  function stump(P,r){ r=r||9;
+    ctx.fillStyle='#0a0a0c'; ctx.beginPath(); ctx.arc(P.x,P.y,r,0,7); ctx.fill();
+    ctx.fillStyle='#3a0a0e'; ctx.beginPath(); ctx.arc(P.x,P.y,r-2,0,7); ctx.fill();
+    ctx.fillStyle='#7a120c'; ctx.beginPath(); ctx.arc(P.x,P.y,r-4.5,0,7); ctx.fill();
+    ctx.fillStyle='#e8e0d2'; ctx.beginPath(); ctx.arc(P.x+1,P.y-1,1.6,0,7); ctx.fill();   // кость
+    ctx.fillStyle='#c01810'; ctx.beginPath(); ctx.arc(P.x-1,P.y+1,1.8,0,7); ctx.fill(); }
+  // артериальный фонтан из обрубка (только первые кадры после расправы)
+  function spurt(P){ if(REPLAY)return; if(dead&&f.t>966&&f.t%2===0){ for(let i=0;i<3;i++)
+    FX.parts.push({x:P.x,y:P.y,vx:(Math.random()-.5)*5,vy:-3.5-Math.random()*6,life:30,max:46,color:Math.random()<.5?'#b81810':'#7a120c',r:2.6,blood:true}); } }
+  // растущая лужа крови под трупом
+  if(dead){ const gp=Math.min(1,(999-f.t)/44); ctx.save(); ctx.fillStyle='rgba(96,10,7,.5)';
+    ctx.beginPath(); ctx.ellipse(f.x,ground+3,28+64*gp,8+6*gp,0,0,7); ctx.fill(); ctx.restore(); }
   ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
   let e;
   e=ik(bs.x,bs.y,handA.x,handA.y,26,23,-dirSign,-1);                // задняя рука
-  muscleLimb(bs,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},5.6,4,3,1.2,1.1,shade(base,-30),OUT,f.broken.armA);
+  muscleLimb(bs,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},5.6,4,3,1.2,1.1,bcolBack,OUT,f.broken.armA);
   e=ik(bh.x,bh.y,footA.x,footA.y,37,34,dirSign,0.45);               // задняя нога
-  muscleLimb(bh,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},8.6,5.4,3.8,1.2,1.3,shade(base,-34),OUT,f.broken.legA);
-  e=ik(fh.x,fh.y,footB.x,footB.y,37,34,dirSign,0.45);               // передняя нога
-  muscleLimb(fh,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},9,5.6,4,1.2,1.3,limbCol(f,'legB'),OUT,f.broken.legB);
+  muscleLimb(bh,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},8.6,5.4,3.8,1.2,1.3,bcolBackLeg,OUT,f.broken.legA);
+  if(sev==='leg'){ stump(fh,10); spurt(fh); }                        // ПЕРЕДНЯЯ НОГА ОТОРВАНА
+  else { e=ik(fh.x,fh.y,footB.x,footB.y,37,34,dirSign,0.45);         // передняя нога
+    muscleLimb(fh,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},9,5.6,4,1.2,1.3, dead?bcol:limbCol(f,'legB'),OUT,f.broken.legB); }
   // шорты
-  ctx.fillStyle=f.flash>0?'#fff':shade(base,-36); ctx.strokeStyle=OUT; ctx.lineWidth=4;
+  ctx.fillStyle=flash?'#fff':shade(dead?bcol:base,-36); ctx.strokeStyle=OUT; ctx.lineWidth=4;
   const sa=W(-13,-5),sb=W(13,-5),scc=W(12,16),sd=W(-12,16);
   ctx.beginPath(); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.lineTo(scc.x,scc.y); ctx.lineTo(sd.x,sd.y); ctx.closePath(); ctx.fill(); ctx.stroke();
   // торс (объёмный)
-  muscleLimb(hip,W(0,-24),sh,13,15.5,12,1.05,1.0, f.flash>0?'#fff':base, OUT, false);
-  drawDownHead(headC,neck,rot,dir,f);
-  e=ik(fs.x,fs.y,handB.x,handB.y,26,23,-dirSign,-1);                // передняя рука
-  muscleLimb(fs,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},6,4.2,3.2,1.24,1.1,limbCol(f,'armB'),OUT,f.broken.armB);
+  muscleLimb(hip,W(0,-24),sh,13,15.5,12,1.05,1.0, bcol, OUT, false);
+  if(dead&&!sev){ const g=W(0,-18); stump(g,7); spurt(g); }          // РАЗОРВАН (торс): зияющая рана
+  if(sev==='head'){ stump(neck,8); spurt(neck); }                   // ОБЕЗГЛАВЛЕН: культя шеи
+  else drawDownHead(headC,neck,rot,dir,f);
+  if(sev==='arm'){ stump(fs,9); spurt(fs); }                         // ПЕРЕДНЯЯ РУКА ОТОРВАНА
+  else { e=ik(fs.x,fs.y,handB.x,handB.y,26,23,-dirSign,-1);          // передняя рука
+    muscleLimb(fs,{x:e.jx,y:e.jy},{x:e.ex,y:e.ey},6,4.2,3.2,1.24,1.1, dead?bcol:limbCol(f,'armB'),OUT,f.broken.armB); }
   ctx.restore();
 }
-function drawKnockdown(f){
-  if(f.dead){ const gp=Math.min(1,(f.t<900?(999-f.t):0)/40); ctx.save(); ctx.fillStyle='rgba(96,10,7,.5)';
-    ctx.beginPath(); ctx.ellipse(f.x,GROUND_Y+3,30+50*gp,8+5*gp,0,0,7); ctx.fill(); ctx.restore();
-    if(f.t>0&&f.t%4===0&&f.t<996)FX.parts.push({x:f.x+(Math.random()-.5)*30,y:GROUND_Y-6,vx:0,vy:0.5,life:30,max:40,color:'#7a120c',r:2,blood:true}); }
-  ctx.save(); ctx.translate(f.x,GROUND_Y-14); ctx.rotate(f.facing>0?-1.3:1.3);
-  ctx.strokeStyle='#0a0a0c'; ctx.lineWidth=28; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(-30,0); ctx.lineTo(20,0); ctx.stroke();
-  ctx.strokeStyle=f.dead?blendAny(f.color,'#5a1118',0.55):f.color; ctx.lineWidth=24; ctx.beginPath(); ctx.moveTo(-30,0); ctx.lineTo(20,0); ctx.stroke();
-  if(f.sever==='head'){ ctx.fillStyle='#7a120c'; ctx.beginPath(); ctx.arc(22,0,7,0,7); ctx.fill(); }   // обрубок шеи
-  else { ctx.fillStyle='#0a0a0c'; ctx.beginPath(); ctx.arc(34,0,16,0,7); ctx.fill();
-    ctx.fillStyle=f.dead?blendAny(f.color,'#5a1118',0.55):f.color; ctx.beginPath(); ctx.arc(34,0,14,0,7); ctx.fill(); }
-  ctx.restore();
-  // артериальный фонтан из обрубка
-  if(f.dead&&f.sever&&f.t>970&&f.t%2===0){ const ox=f.sever==='head'?f.x-f.facing*16:f.x;
-    for(let i=0;i<2;i++)FX.parts.push({x:ox,y:GROUND_Y-16,vx:(Math.random()-.5)*4-f.facing*1.5,vy:-4-Math.random()*5,life:30,max:42,color:Math.random()<.5?'#b81810':'#7a120c',r:2.4,blood:true}); } }
 
 /* ---- HUD ---- */
 function drawHUD(){ drawBar(p1,40,true); drawBar(p2,W-40,false);
@@ -2139,8 +2152,9 @@ function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y);
 function shade(hex,amt){ const c=hex.replace('#','');
   let r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);
   r=clamp(r+amt,0,255); g=clamp(g+amt,0,255); b=clamp(b+amt,0,255); return `rgb(${r|0},${g|0},${b|0})`; }
-function fit(){ const s=Math.min(innerWidth/W,innerHeight/H); document.getElementById('wrap').style.transform=`scale(${s})`; }
-addEventListener('resize',fit); fit();
+function fit(){ const s=Math.min(innerWidth/W,innerHeight/H);
+  document.getElementById('wrap').style.transform=`translate(-50%,-50%) scale(${s})`; }
+addEventListener('resize',fit); addEventListener('orientationchange',()=>setTimeout(fit,80)); fit();
 
 (function initYa(){ if(location.search.includes('noya'))return;
   const s=document.createElement('script'); s.src='https://yandex.ru/games/sdk/v2';
